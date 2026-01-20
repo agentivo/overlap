@@ -503,7 +503,6 @@
           </div>
         </div>
 
-        <button class="btn btn-primary" onclick="saveAvailability()">Save Availability</button>
         <button class="btn btn-secondary" onclick="clearMyAvailability()">Clear Selection</button>
         <button class="btn btn-copy" id="copyBtn" onclick="copyLink()">Copy Share Link</button>
 
@@ -535,7 +534,7 @@
 
         <div class="instructions">
           <span id="timezoneDisplay"></span>
-          Click and drag to select time slots. Save your availability, then share the link with others.
+          Enter your name, then click and drag to select time slots. Share the link with others.
         </div>
       </div>
     </div>
@@ -768,12 +767,38 @@
 
     function toggleCell(cellId) {
       if (!cellId) return;
+
+      // Require name before selecting
+      const nameInput = document.getElementById('userName');
+      const name = nameInput.value.trim();
+      if (!name) {
+        nameInput.focus();
+        isMouseDown = false;
+        return;
+      }
+
       if (isAdding) {
         myAvailability.add(cellId);
       } else {
         myAvailability.delete(cellId);
       }
       updateGridDisplay();
+      autoSave();
+    }
+
+    function autoSave() {
+      const name = document.getElementById('userName').value.trim();
+      if (!name) return;
+
+      // Set timezone on first save
+      if (!eventTimezone) {
+        eventTimezone = getLocalTimezone();
+        updateTimezoneDisplay();
+      }
+
+      allParticipants[name] = new Set(myAvailability);
+      updateParticipantList();
+      updateURL();
     }
 
     document.addEventListener('mouseup', () => {
@@ -840,27 +865,10 @@
       updateGridDisplay();
     }
 
-    function saveAvailability() {
-      const name = document.getElementById('userName').value.trim();
-      if (!name) {
-        document.getElementById('userName').focus();
-        return;
-      }
-
-      // Set timezone on first save
-      if (!eventTimezone) {
-        eventTimezone = getLocalTimezone();
-        updateTimezoneDisplay();
-      }
-
-      allParticipants[name] = new Set(myAvailability);
-      updateParticipantList();
-      updateURL();
-    }
-
     function clearMyAvailability() {
       myAvailability.clear();
       updateGridDisplay();
+      autoSave();
     }
 
     function updateParticipantList() {
@@ -927,6 +935,16 @@
         }, 2000);
       });
     }
+
+    // Auto-focus name input when typing
+    document.addEventListener('keydown', (e) => {
+      const nameInput = document.getElementById('userName');
+      if (document.activeElement !== nameInput &&
+          !e.ctrlKey && !e.metaKey && !e.altKey &&
+          e.key.length === 1) {
+        nameInput.focus();
+      }
+    });
 
     // Initialize
     initTheme();

@@ -297,10 +297,6 @@
       cursor: pointer;
     }
 
-    .grid-cell.hour-start {
-      border-top: 2px solid var(--text-secondary);
-    }
-
     .grid-cell.header {
       background: var(--bg-secondary);
       font-size: 0.75rem;
@@ -322,6 +318,11 @@
       justify-content: flex-end;
       padding: 2px 8px 0 0;
       cursor: default;
+    }
+
+    .grid-cell.time-label.faded {
+      color: var(--border);
+      font-size: 0.625rem;
     }
 
     .grid-cell.available {
@@ -703,11 +704,14 @@
       // Time slots
       for (let h = startHour; h < endHour; h++) {
         for (let q = 0; q < 4; q++) {
-          // Time label (only on hour)
+          // Time label
           const timeCell = document.createElement('div');
           timeCell.className = 'grid-cell time-label';
           if (q === 0) {
             timeCell.textContent = formatHour(h);
+          } else {
+            timeCell.textContent = ':' + (q * 15);
+            timeCell.classList.add('faded');
           }
           grid.appendChild(timeCell);
 
@@ -715,7 +719,7 @@
           days.forEach((date, dayIndex) => {
             const cell = document.createElement('div');
             const cellId = getCellId(dayIndex, h, q);
-            cell.className = 'grid-cell' + (q === 0 ? ' hour-start' : '');
+            cell.className = 'grid-cell';
             cell.dataset.cellId = cellId;
             cell.dataset.day = dayIndex;
             cell.dataset.hour = h;
@@ -820,8 +824,7 @@
       if (mode === 'edit') {
         cells.forEach(cell => {
           const cellId = cell.dataset.cellId;
-          const hourStart = cell.dataset.quarter === '0' ? ' hour-start' : '';
-          cell.className = 'grid-cell' + hourStart + (myAvailability.has(cellId) ? ' available' : '');
+          cell.className = 'grid-cell' + (myAvailability.has(cellId) ? ' available' : '');
         });
       } else {
         // View mode - show aggregate
@@ -833,8 +836,7 @@
             if (slots.has(cellId)) count++;
           });
 
-          const hourStart = cell.dataset.quarter === '0' ? ' hour-start' : '';
-          cell.className = 'grid-cell' + hourStart;
+          cell.className = 'grid-cell';
           if (count > 0 && participantCount > 0) {
             const level = Math.ceil((count / participantCount) * 9);
             cell.classList.add(`available-${level}`);

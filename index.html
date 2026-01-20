@@ -1009,22 +1009,24 @@
     }
 
     function fillCellsBetween(from, to) {
-      // Only fill if same day (vertical drag)
-      if (from.day !== to.day) return;
-
+      const minDay = Math.min(from.day, to.day);
+      const maxDay = Math.max(from.day, to.day);
       const fromSlot = from.hour * 4 + from.quarter;
       const toSlot = to.hour * 4 + to.quarter;
       const minSlot = Math.min(fromSlot, toSlot);
       const maxSlot = Math.max(fromSlot, toSlot);
 
-      for (let slot = minSlot + 1; slot < maxSlot; slot++) {
-        const hour = Math.floor(slot / 4);
-        const quarter = slot % 4;
-        const cellId = getCellId(from.day, hour, quarter);
-        if (isAdding) {
-          myAvailability.add(cellId);
-        } else {
-          myAvailability.delete(cellId);
+      // Fill rectangle between from and to
+      for (let day = minDay; day <= maxDay; day++) {
+        for (let slot = minSlot; slot <= maxSlot; slot++) {
+          const hour = Math.floor(slot / 4);
+          const quarter = slot % 4;
+          const cellId = getCellId(day, hour, quarter);
+          if (isAdding) {
+            myAvailability.add(cellId);
+          } else {
+            myAvailability.delete(cellId);
+          }
         }
       }
     }

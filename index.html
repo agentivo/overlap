@@ -297,6 +297,10 @@
       cursor: pointer;
     }
 
+    .grid-cell.hour-start {
+      border-top: 1px solid var(--border);
+    }
+
     .grid-cell.header {
       background: var(--bg-secondary);
       font-size: 0.75rem;
@@ -711,7 +715,7 @@
           days.forEach((date, dayIndex) => {
             const cell = document.createElement('div');
             const cellId = getCellId(dayIndex, h, q);
-            cell.className = 'grid-cell';
+            cell.className = 'grid-cell' + (q === 0 ? ' hour-start' : '');
             cell.dataset.cellId = cellId;
             cell.dataset.day = dayIndex;
             cell.dataset.hour = h;
@@ -816,7 +820,8 @@
       if (mode === 'edit') {
         cells.forEach(cell => {
           const cellId = cell.dataset.cellId;
-          cell.className = 'grid-cell' + (myAvailability.has(cellId) ? ' available' : '');
+          const hourStart = cell.dataset.quarter === '0' ? ' hour-start' : '';
+          cell.className = 'grid-cell' + hourStart + (myAvailability.has(cellId) ? ' available' : '');
         });
       } else {
         // View mode - show aggregate
@@ -828,7 +833,8 @@
             if (slots.has(cellId)) count++;
           });
 
-          cell.className = 'grid-cell';
+          const hourStart = cell.dataset.quarter === '0' ? ' hour-start' : '';
+          cell.className = 'grid-cell' + hourStart;
           if (count > 0 && participantCount > 0) {
             const level = Math.ceil((count / participantCount) * 9);
             cell.classList.add(`available-${level}`);

@@ -495,7 +495,7 @@
         <h2>Your Info</h2>
         <div class="form-group">
           <label>Your Name</label>
-          <input type="text" id="userName" placeholder="Enter your name">
+          <input type="text" id="userName" placeholder="Your name (required)">
         </div>
 
         <h2>Time Range</h2>
@@ -539,7 +539,7 @@
 
         <div class="instructions">
           <span id="timezoneDisplay"></span>
-          Enter your name, then click and drag to select time slots. Share the link with others.
+          Enter your name above, then click and drag to mark when you're free.
         </div>
       </div>
     </div>
@@ -962,6 +962,9 @@
     renderGrid();
     updateParticipantList();
     updateTimezoneDisplay();
+
+    // Auto-focus name input on load
+    document.getElementById('userName').focus();
   </script>
 </body>
 </html>

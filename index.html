@@ -534,6 +534,7 @@
         </div>
 
         <div class="instructions">
+          <span id="timezoneDisplay"></span>
           Click and drag to select time slots. Save your availability, then share the link with others.
         </div>
       </div>
@@ -588,6 +589,33 @@
     let days = [];
     let myAvailability = new Set();
     let allParticipants = {};
+    let eventTimezone = null;
+
+    // Timezone
+    function getLocalTimezone() {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    }
+
+    function formatTimezone(tz) {
+      try {
+        const name = tz.replace(/_/g, ' ');
+        const offset = new Date().toLocaleString('en-US', { timeZone: tz, timeZoneName: 'shortOffset' }).split(' ').pop();
+        return `${name} (${offset})`;
+      } catch {
+        return tz;
+      }
+    }
+
+    function updateTimezoneDisplay() {
+      const display = document.getElementById('timezoneDisplay');
+      const localTz = getLocalTimezone();
+
+      if (eventTimezone && eventTimezone !== localTz) {
+        display.innerHTML = `<strong>Times shown in ${formatTimezone(eventTimezone)}</strong> · Your timezone: ${formatTimezone(localTz)}<br><br>`;
+      } else {
+        display.innerHTML = `Times shown in ${formatTimezone(localTz)}<br><br>`;
+      }
+    }
 
     // Generate next 7 days
     function generateDays() {
@@ -819,6 +847,12 @@
         return;
       }
 
+      // Set timezone on first save
+      if (!eventTimezone) {
+        eventTimezone = getLocalTimezone();
+        updateTimezoneDisplay();
+      }
+
       allParticipants[name] = new Set(myAvailability);
       updateParticipantList();
       updateURL();
@@ -848,9 +882,12 @@
     }
 
     function updateURL() {
-      const data = {};
+      const data = {
+        tz: eventTimezone || getLocalTimezone(),
+        p: {}
+      };
       Object.entries(allParticipants).forEach(([name, slots]) => {
-        data[name] = Array.from(slots);
+        data.p[name] = Array.from(slots);
       });
       const encoded = btoa(encodeURIComponent(JSON.stringify(data)));
       history.replaceState(null, '', '?d=' + encoded);
@@ -862,9 +899,17 @@
       if (encoded) {
         try {
           const data = JSON.parse(decodeURIComponent(atob(encoded)));
-          Object.entries(data).forEach(([name, slots]) => {
-            allParticipants[name] = new Set(slots);
-          });
+          // Handle both old format (direct participants) and new format (with timezone)
+          if (data.tz) {
+            eventTimezone = data.tz;
+            Object.entries(data.p || {}).forEach(([name, slots]) => {
+              allParticipants[name] = new Set(slots);
+            });
+          } else {
+            Object.entries(data).forEach(([name, slots]) => {
+              allParticipants[name] = new Set(slots);
+            });
+          }
         } catch (e) {
           console.error('Failed to load data from URL');
         }
@@ -890,6 +935,7 @@
     loadFromURL();
     renderGrid();
     updateParticipantList();
+    updateTimezoneDisplay();
   </script>
 </body>
 </html>

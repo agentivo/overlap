@@ -840,6 +840,7 @@
     let myAvailability = new Set();
     let allParticipants = {};
     let eventTimezone = null;
+    let lastCell = null;
 
     // Timezone
     function getLocalTimezone() {
@@ -987,14 +988,45 @@
     function onCellMouseDown(e) {
       if (mode !== 'edit') return;
       isMouseDown = true;
-      const cellId = e.target.dataset.cellId;
+      const cell = e.target;
+      const cellId = cell.dataset.cellId;
       isAdding = !myAvailability.has(cellId);
+      lastCell = { day: parseInt(cell.dataset.day), hour: parseInt(cell.dataset.hour), quarter: parseInt(cell.dataset.quarter) };
       toggleCell(cellId);
     }
 
     function onCellMouseEnter(e) {
       if (!isMouseDown || mode !== 'edit') return;
-      toggleCell(e.target.dataset.cellId);
+      const cell = e.target;
+      const currentCell = { day: parseInt(cell.dataset.day), hour: parseInt(cell.dataset.hour), quarter: parseInt(cell.dataset.quarter) };
+
+      if (lastCell) {
+        fillCellsBetween(lastCell, currentCell);
+      }
+
+      lastCell = currentCell;
+      toggleCell(cell.dataset.cellId);
+    }
+
+    function fillCellsBetween(from, to) {
+      // Only fill if same day (vertical drag)
+      if (from.day !== to.day) return;
+
+      const fromSlot = from.hour * 4 + from.quarter;
+      const toSlot = to.hour * 4 + to.quarter;
+      const minSlot = Math.min(fromSlot, toSlot);
+      const maxSlot = Math.max(fromSlot, toSlot);
+
+      for (let slot = minSlot + 1; slot < maxSlot; slot++) {
+        const hour = Math.floor(slot / 4);
+        const quarter = slot % 4;
+        const cellId = getCellId(from.day, hour, quarter);
+        if (isAdding) {
+          myAvailability.add(cellId);
+        } else {
+          myAvailability.delete(cellId);
+        }
+      }
     }
 
     function onCellTouchStart(e) {
@@ -1005,6 +1037,7 @@
       const cell = document.elementFromPoint(touch.clientX, touch.clientY);
       if (cell && cell.dataset.cellId) {
         isAdding = !myAvailability.has(cell.dataset.cellId);
+        lastCell = { day: parseInt(cell.dataset.day), hour: parseInt(cell.dataset.hour), quarter: parseInt(cell.dataset.quarter) };
         toggleCell(cell.dataset.cellId);
       }
     }
@@ -1015,6 +1048,11 @@
       const touch = e.touches[0];
       const cell = document.elementFromPoint(touch.clientX, touch.clientY);
       if (cell && cell.dataset.cellId) {
+        const currentCell = { day: parseInt(cell.dataset.day), hour: parseInt(cell.dataset.hour), quarter: parseInt(cell.dataset.quarter) };
+        if (lastCell) {
+          fillCellsBetween(lastCell, currentCell);
+        }
+        lastCell = currentCell;
         toggleCell(cell.dataset.cellId);
       }
     }
@@ -1057,10 +1095,12 @@
 
     document.addEventListener('mouseup', () => {
       isMouseDown = false;
+      lastCell = null;
     });
 
     document.addEventListener('touchend', () => {
       isMouseDown = false;
+      lastCell = null;
     });
 
     function updateGridDisplay() {

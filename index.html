@@ -6,6 +6,7 @@
   <title>Overlap - Find a time that works for everyone</title>
   <meta name="description" content="Simple availability scheduling. Click and drag to mark when you're free, share the link, find the overlap.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='10' y='30' width='40' height='40' rx='8' fill='%234caf50' opacity='0.7'/><rect x='50' y='30' width='40' height='40' rx='8' fill='%232196f3' opacity='0.7'/></svg>">
+  <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -49,7 +50,6 @@
       color: var(--text);
       min-height: 100vh;
       padding: 2rem;
-      transition: background 0.3s, color 0.3s;
       user-select: none;
       -webkit-user-select: none;
     }
@@ -89,8 +89,37 @@
       color: var(--text);
     }
 
+    .event-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--text);
+      background: transparent;
+      border: none;
+      border-bottom: 1px dashed transparent;
+      padding: 0 0 0.25rem 0;
+      margin-bottom: 1rem;
+      width: 100%;
+      transition: border-color 0.2s;
+    }
+
+    .event-title:hover {
+      border-bottom-color: var(--border);
+    }
+
+    .event-title:focus {
+      outline: none;
+      border-bottom-color: var(--text-secondary);
+    }
+
+    .event-title::placeholder {
+      color: var(--text-secondary);
+      font-weight: 400;
+    }
+
     .subtitle {
       color: var(--text-secondary);
+      font-size: 0.8125rem;
+      margin-top: 0.25rem;
     }
 
     .theme-toggle {
@@ -114,7 +143,6 @@
     .theme-toggle svg {
       width: 20px;
       height: 20px;
-      transition: all 0.2s;
     }
 
     .sun-icon {
@@ -180,6 +208,16 @@
       border-color: #0071e3;
     }
 
+    button:focus,
+    button:active,
+    .range-slider input:focus {
+      outline: none;
+    }
+
+    button:active {
+      transform: none;
+    }
+
     .form-group input.shake {
       animation: shake 0.5s ease-in-out;
       border-color: #ef4444;
@@ -219,6 +257,16 @@
       pointer-events: none;
     }
 
+    .range-highlight {
+      position: absolute;
+      height: 2px;
+      background: #4caf50;
+      border-radius: 1px;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+
     .range-slider input[type="range"] {
       position: absolute;
       left: 0;
@@ -242,14 +290,14 @@
     .range-slider input[type="range"]::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
-      width: 12px;
-      height: 12px;
+      width: 20px;
+      height: 20px;
       background: #4caf50;
       border-radius: 50%;
       cursor: pointer;
       pointer-events: auto;
       border: none;
-      margin-top: -5px;
+      margin-top: -9px;
       transition: transform 0.15s, box-shadow 0.15s;
     }
 
@@ -264,8 +312,8 @@
     }
 
     .range-slider input[type="range"]::-moz-range-thumb {
-      width: 12px;
-      height: 12px;
+      width: 20px;
+      height: 20px;
       background: #4caf50;
       border-radius: 50%;
       cursor: pointer;
@@ -666,7 +714,7 @@
           </svg>
           <h1>Overlap</h1>
         </div>
-        <p class="subtitle">Find a time that works for everyone</p>
+        <p class="subtitle">Share this link to find a time that works</p>
       </div>
       <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
         <svg class="sun-icon" viewBox="0 0 24 24" style="display: none;">
@@ -683,15 +731,16 @@
       <div class="sidebar">
         <div class="form-group">
           <label>Your Name</label>
-          <input type="text" id="userName" placeholder="Required to share">
+          <input type="text" id="userName" placeholder="Enter to mark availability">
         </div>
 
         <div class="form-group">
           <label>Hours to show <span id="timeRangeLabel" class="range-label"></span></label>
           <div class="range-slider">
-            <div class="range-track" id="rangeTrack"></div>
-            <input type="range" id="startTime" min="0" max="23" value="9">
-            <input type="range" id="endTime" min="1" max="24" value="17">
+            <div class="range-track"></div>
+            <div class="range-highlight" id="rangeHighlight"></div>
+            <input type="range" id="startTime" min="0" max="24" value="9">
+            <input type="range" id="endTime" min="0" max="24" value="17">
           </div>
         </div>
 
@@ -709,6 +758,7 @@
       </div>
 
       <div class="main">
+        <input type="text" id="eventTitle" class="event-title" placeholder="What are you scheduling?">
         <div class="grid-header">
           <div class="mode-toggle">
             <button class="active" id="editBtn" onclick="setMode('edit')">Me</button>
@@ -736,258 +786,34 @@
 
         <div class="instructions">
           <span id="timezoneDisplay"></span>
-          Enter your name above, then click and drag to mark when you're free.
+          Click and drag to mark when you're free. Enter your name to save.
         </div>
       </div>
     </div>
   </div>
 
   <script>
-    // LZ-string compression (minimal implementation for URI-safe encoding)
-    const LZ = (() => {
-      const keyStr = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    // Gun.js setup - connect to same-origin relay
+    const gun = Gun({
+      peers: [location.origin + '/gun'],
+      localStorage: true
+    });
 
-      function compressToEncodedURIComponent(input) {
-        if (input == null) return '';
-        return _compress(input, 6, (a) => keyStr.charAt(a));
+    // Get or create event ID from URL
+    function getEventId() {
+      const params = new URLSearchParams(location.search);
+      let eventId = params.get('event');
+
+      if (!eventId) {
+        // Generate short random ID
+        eventId = Math.random().toString(36).substring(2, 10);
+        history.replaceState(null, '', '?event=' + eventId);
       }
+      return eventId;
+    }
 
-      function decompressFromEncodedURIComponent(input) {
-        if (input == null) return '';
-        if (input === '') return null;
-        return _decompress(input.length, 32, (index) => {
-          const val = keyStr.indexOf(input.charAt(index));
-          return val === -1 ? undefined : val;
-        });
-      }
-
-      function _compress(uncompressed, bitsPerChar, getCharFromInt) {
-        let i, value, context_dictionary = {}, context_dictionaryToCreate = {},
-          context_c = '', context_wc = '', context_w = '', context_enlargeIn = 2,
-          context_dictSize = 3, context_numBits = 2, context_data = [], context_data_val = 0,
-          context_data_position = 0;
-
-        for (let ii = 0; ii < uncompressed.length; ii++) {
-          context_c = uncompressed.charAt(ii);
-          if (!Object.prototype.hasOwnProperty.call(context_dictionary, context_c)) {
-            context_dictionary[context_c] = context_dictSize++;
-            context_dictionaryToCreate[context_c] = true;
-          }
-          context_wc = context_w + context_c;
-          if (Object.prototype.hasOwnProperty.call(context_dictionary, context_wc)) {
-            context_w = context_wc;
-          } else {
-            if (Object.prototype.hasOwnProperty.call(context_dictionaryToCreate, context_w)) {
-              if (context_w.charCodeAt(0) < 256) {
-                for (i = 0; i < context_numBits; i++) {
-                  context_data_val = (context_data_val << 1);
-                  if (context_data_position === bitsPerChar - 1) {
-                    context_data_position = 0;
-                    context_data.push(getCharFromInt(context_data_val));
-                    context_data_val = 0;
-                  } else context_data_position++;
-                }
-                value = context_w.charCodeAt(0);
-                for (i = 0; i < 8; i++) {
-                  context_data_val = (context_data_val << 1) | (value & 1);
-                  if (context_data_position === bitsPerChar - 1) {
-                    context_data_position = 0;
-                    context_data.push(getCharFromInt(context_data_val));
-                    context_data_val = 0;
-                  } else context_data_position++;
-                  value = value >> 1;
-                }
-              } else {
-                value = 1;
-                for (i = 0; i < context_numBits; i++) {
-                  context_data_val = (context_data_val << 1) | value;
-                  if (context_data_position === bitsPerChar - 1) {
-                    context_data_position = 0;
-                    context_data.push(getCharFromInt(context_data_val));
-                    context_data_val = 0;
-                  } else context_data_position++;
-                  value = 0;
-                }
-                value = context_w.charCodeAt(0);
-                for (i = 0; i < 16; i++) {
-                  context_data_val = (context_data_val << 1) | (value & 1);
-                  if (context_data_position === bitsPerChar - 1) {
-                    context_data_position = 0;
-                    context_data.push(getCharFromInt(context_data_val));
-                    context_data_val = 0;
-                  } else context_data_position++;
-                  value = value >> 1;
-                }
-              }
-              context_enlargeIn--;
-              if (context_enlargeIn === 0) {
-                context_enlargeIn = Math.pow(2, context_numBits);
-                context_numBits++;
-              }
-              delete context_dictionaryToCreate[context_w];
-            } else {
-              value = context_dictionary[context_w];
-              for (i = 0; i < context_numBits; i++) {
-                context_data_val = (context_data_val << 1) | (value & 1);
-                if (context_data_position === bitsPerChar - 1) {
-                  context_data_position = 0;
-                  context_data.push(getCharFromInt(context_data_val));
-                  context_data_val = 0;
-                } else context_data_position++;
-                value = value >> 1;
-              }
-            }
-            context_enlargeIn--;
-            if (context_enlargeIn === 0) {
-              context_enlargeIn = Math.pow(2, context_numBits);
-              context_numBits++;
-            }
-            context_dictionary[context_wc] = context_dictSize++;
-            context_w = String(context_c);
-          }
-        }
-        if (context_w !== '') {
-          if (Object.prototype.hasOwnProperty.call(context_dictionaryToCreate, context_w)) {
-            if (context_w.charCodeAt(0) < 256) {
-              for (i = 0; i < context_numBits; i++) {
-                context_data_val = (context_data_val << 1);
-                if (context_data_position === bitsPerChar - 1) {
-                  context_data_position = 0;
-                  context_data.push(getCharFromInt(context_data_val));
-                  context_data_val = 0;
-                } else context_data_position++;
-              }
-              value = context_w.charCodeAt(0);
-              for (i = 0; i < 8; i++) {
-                context_data_val = (context_data_val << 1) | (value & 1);
-                if (context_data_position === bitsPerChar - 1) {
-                  context_data_position = 0;
-                  context_data.push(getCharFromInt(context_data_val));
-                  context_data_val = 0;
-                } else context_data_position++;
-                value = value >> 1;
-              }
-            } else {
-              value = 1;
-              for (i = 0; i < context_numBits; i++) {
-                context_data_val = (context_data_val << 1) | value;
-                if (context_data_position === bitsPerChar - 1) {
-                  context_data_position = 0;
-                  context_data.push(getCharFromInt(context_data_val));
-                  context_data_val = 0;
-                } else context_data_position++;
-                value = 0;
-              }
-              value = context_w.charCodeAt(0);
-              for (i = 0; i < 16; i++) {
-                context_data_val = (context_data_val << 1) | (value & 1);
-                if (context_data_position === bitsPerChar - 1) {
-                  context_data_position = 0;
-                  context_data.push(getCharFromInt(context_data_val));
-                  context_data_val = 0;
-                } else context_data_position++;
-                value = value >> 1;
-              }
-            }
-            context_enlargeIn--;
-            if (context_enlargeIn === 0) {
-              context_enlargeIn = Math.pow(2, context_numBits);
-              context_numBits++;
-            }
-            delete context_dictionaryToCreate[context_w];
-          } else {
-            value = context_dictionary[context_w];
-            for (i = 0; i < context_numBits; i++) {
-              context_data_val = (context_data_val << 1) | (value & 1);
-              if (context_data_position === bitsPerChar - 1) {
-                context_data_position = 0;
-                context_data.push(getCharFromInt(context_data_val));
-                context_data_val = 0;
-              } else context_data_position++;
-              value = value >> 1;
-            }
-          }
-          context_enlargeIn--;
-          if (context_enlargeIn === 0) {
-            context_numBits++;
-          }
-        }
-        value = 2;
-        for (i = 0; i < context_numBits; i++) {
-          context_data_val = (context_data_val << 1) | (value & 1);
-          if (context_data_position === bitsPerChar - 1) {
-            context_data_position = 0;
-            context_data.push(getCharFromInt(context_data_val));
-            context_data_val = 0;
-          } else context_data_position++;
-          value = value >> 1;
-        }
-        while (true) {
-          context_data_val = (context_data_val << 1);
-          if (context_data_position === bitsPerChar - 1) {
-            context_data.push(getCharFromInt(context_data_val));
-            break;
-          } else context_data_position++;
-        }
-        return context_data.join('');
-      }
-
-      function _decompress(length, resetValue, getNextValue) {
-        let dictionary = [], enlargeIn = 4, dictSize = 4, numBits = 3,
-          entry = '', result = [], w, c, data = { val: getNextValue(0), position: resetValue, index: 1 };
-
-        function readBits(numBits) {
-          let bits = 0, power = 1;
-          for (let i = 0; i < numBits; i++) {
-            const resb = data.val & data.position;
-            data.position >>= 1;
-            if (data.position === 0) {
-              data.position = resetValue;
-              data.val = getNextValue(data.index++);
-              if (data.val === undefined) return -1;
-            }
-            bits |= (resb > 0 ? 1 : 0) * power;
-            power <<= 1;
-          }
-          return bits;
-        }
-
-        for (let i = 0; i < 3; i++) dictionary[i] = i;
-
-        const firstBits = readBits(2);
-        if (firstBits === -1) return null;
-        switch (firstBits) {
-          case 0: c = String.fromCharCode(readBits(8)); break;
-          case 1: c = String.fromCharCode(readBits(16)); break;
-          case 2: return '';
-        }
-        dictionary[3] = c;
-        w = c;
-        result.push(c);
-
-        while (true) {
-          if (data.index > length) return '';
-          let cc = readBits(numBits);
-          if (cc === -1) return null;
-          switch (cc) {
-            case 0: c = String.fromCharCode(readBits(8)); dictionary[dictSize++] = c; cc = dictSize - 1; enlargeIn--; break;
-            case 1: c = String.fromCharCode(readBits(16)); dictionary[dictSize++] = c; cc = dictSize - 1; enlargeIn--; break;
-            case 2: return result.join('');
-          }
-          if (enlargeIn === 0) { enlargeIn = Math.pow(2, numBits); numBits++; }
-          if (dictionary[cc]) entry = dictionary[cc];
-          else if (cc === dictSize) entry = w + w.charAt(0);
-          else return null;
-          result.push(entry);
-          dictionary[dictSize++] = w + entry.charAt(0);
-          enlargeIn--;
-          if (enlargeIn === 0) { enlargeIn = Math.pow(2, numBits); numBits++; }
-          w = entry;
-        }
-      }
-
-      return { compressToEncodedURIComponent, decompressFromEncodedURIComponent };
-    })();
+    const eventId = getEventId();
+    const eventRef = gun.get('overlap-events').get(eventId);
 
     // Theme
     function initTheme() {
@@ -1016,15 +842,8 @@
     }
 
     function updateThemeIcon(theme) {
-      const sunIcon = document.querySelector('.sun-icon');
-      const moonIcon = document.querySelector('.moon-icon');
-      if (theme === 'dark') {
-        sunIcon.style.display = 'block';
-        moonIcon.style.display = 'none';
-      } else {
-        sunIcon.style.display = 'none';
-        moonIcon.style.display = 'block';
-      }
+      document.querySelector('.sun-icon').style.display = theme === 'dark' ? 'block' : 'none';
+      document.querySelector('.moon-icon').style.display = theme === 'dark' ? 'none' : 'block';
     }
 
     // State
@@ -1039,29 +858,8 @@
     let eventTimezone = null;
     let lastCell = null;
     let weekOffset = 0;
-    let myCurrentName = null; // Track current user's name to avoid duplicates
-
-    // Timezone lookup table (common timezones)
-    const TIMEZONES = [
-      'UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
-      'America/Toronto', 'America/Vancouver', 'America/Mexico_City', 'America/Sao_Paulo',
-      'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Madrid', 'Europe/Rome',
-      'Europe/Amsterdam', 'Europe/Brussels', 'Europe/Zurich', 'Europe/Stockholm', 'Europe/Warsaw',
-      'Europe/Lisbon', 'Europe/Dublin', 'Europe/Vienna', 'Europe/Prague', 'Europe/Budapest',
-      'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Hong_Kong', 'Asia/Singapore', 'Asia/Seoul',
-      'Asia/Kolkata', 'Asia/Dubai', 'Asia/Bangkok', 'Asia/Jakarta', 'Asia/Manila',
-      'Australia/Sydney', 'Australia/Melbourne', 'Australia/Brisbane', 'Australia/Perth',
-      'Pacific/Auckland', 'Pacific/Honolulu', 'Africa/Cairo', 'Africa/Johannesburg'
-    ];
-
-    function getTimezoneIndex(tz) {
-      const idx = TIMEZONES.indexOf(tz);
-      return idx >= 0 ? idx : null;
-    }
-
-    function getTimezoneByIndex(idx) {
-      return TIMEZONES[idx] || null;
-    }
+    let myCurrentName = null;
+    let saveTimeout = null;
 
     // Timezone
     function getLocalTimezone() {
@@ -1076,218 +874,6 @@
       } catch {
         return tz;
       }
-    }
-
-    // Compact encoding helpers
-    const EPOCH = new Date('2024-01-01').getTime();
-    const DAY_MS = 24 * 60 * 60 * 1000;
-
-    function cellIdToSlot(cellId) {
-      // Format: YYYY-MM-DD-hour-quarter
-      const parts = cellId.split('-');
-      const dateStr = parts.slice(0, 3).join('-');
-      const hour = parseInt(parts[3]);
-      const quarter = parseInt(parts[4]);
-      const date = new Date(dateStr);
-      const daysSinceEpoch = Math.floor((date.getTime() - EPOCH) / DAY_MS);
-      return daysSinceEpoch * 96 + hour * 4 + quarter;
-    }
-
-    function slotToCellId(slot) {
-      const daysSinceEpoch = Math.floor(slot / 96);
-      const remainder = slot % 96;
-      const hour = Math.floor(remainder / 4);
-      const quarter = remainder % 4;
-      const date = new Date(EPOCH + daysSinceEpoch * DAY_MS);
-      const dateStr = date.toISOString().split('T')[0];
-      return `${dateStr}-${hour}-${quarter}`;
-    }
-
-    function encodeRanges(slots) {
-      if (slots.length === 0) return '';
-      const sorted = [...slots].sort((a, b) => a - b);
-      const ranges = [];
-      let start = sorted[0], len = 1;
-
-      for (let i = 1; i < sorted.length; i++) {
-        if (sorted[i] === sorted[i-1] + 1) {
-          len++;
-        } else {
-          ranges.push(len === 1 ? `${start}` : `${start}-${len}`);
-          start = sorted[i];
-          len = 1;
-        }
-      }
-      ranges.push(len === 1 ? `${start}` : `${start}-${len}`);
-      return ranges.join(',');
-    }
-
-    function decodeRanges(str) {
-      if (!str) return [];
-      const slots = [];
-      str.split(',').forEach(part => {
-        if (part.includes('-')) {
-          const [start, len] = part.split('-').map(Number);
-          for (let i = 0; i < len; i++) slots.push(start + i);
-        } else {
-          slots.push(Number(part));
-        }
-      });
-      return slots;
-    }
-
-    // Binary encoding with base64url
-    function encodeBinary(tz, participants) {
-      const bytes = [];
-
-      // Timezone (1 byte index, or 255 + length + string)
-      const tzIdx = getTimezoneIndex(tz);
-      if (tzIdx !== null) {
-        bytes.push(tzIdx);
-      } else {
-        bytes.push(255);
-        const tzBytes = new TextEncoder().encode(tz);
-        bytes.push(tzBytes.length);
-        bytes.push(...tzBytes);
-      }
-
-      // Participants
-      const entries = Object.entries(participants);
-      bytes.push(entries.length);
-
-      entries.forEach(([name, cellIds]) => {
-        const nameBytes = new TextEncoder().encode(name);
-        bytes.push(nameBytes.length);
-        bytes.push(...nameBytes);
-
-        // Convert to slots and get ranges
-        const slots = Array.from(cellIds).map(cellIdToSlot).sort((a, b) => a - b);
-        const ranges = [];
-        if (slots.length > 0) {
-          let start = slots[0], len = 1;
-          for (let i = 1; i < slots.length; i++) {
-            if (slots[i] === slots[i-1] + 1) {
-              len++;
-            } else {
-              ranges.push([start, len]);
-              start = slots[i];
-              len = 1;
-            }
-          }
-          ranges.push([start, len]);
-        }
-
-        // Number of ranges (2 bytes)
-        bytes.push(ranges.length & 0xFF);
-        bytes.push((ranges.length >> 8) & 0xFF);
-
-        // Each range: start (3 bytes) + length (1 byte)
-        ranges.forEach(([start, len]) => {
-          bytes.push(start & 0xFF);
-          bytes.push((start >> 8) & 0xFF);
-          bytes.push((start >> 16) & 0xFF);
-          bytes.push(len);
-        });
-      });
-
-      return base64UrlEncode(new Uint8Array(bytes));
-    }
-
-    function decodeBinary(str) {
-      const bytes = base64UrlDecode(str);
-      let pos = 0;
-
-      // Timezone
-      let tz;
-      const tzIdx = bytes[pos++];
-      if (tzIdx === 255) {
-        const tzLen = bytes[pos++];
-        tz = new TextDecoder().decode(bytes.slice(pos, pos + tzLen));
-        pos += tzLen;
-      } else {
-        tz = getTimezoneByIndex(tzIdx) || getLocalTimezone();
-      }
-
-      // Participants
-      const numParticipants = bytes[pos++];
-      const participants = {};
-
-      for (let i = 0; i < numParticipants; i++) {
-        const nameLen = bytes[pos++];
-        const name = new TextDecoder().decode(bytes.slice(pos, pos + nameLen));
-        pos += nameLen;
-
-        const numRanges = bytes[pos] | (bytes[pos + 1] << 8);
-        pos += 2;
-
-        const cellIds = new Set();
-        for (let r = 0; r < numRanges; r++) {
-          const start = bytes[pos] | (bytes[pos + 1] << 8) | (bytes[pos + 2] << 16);
-          pos += 3;
-          const len = bytes[pos++];
-          for (let s = 0; s < len; s++) {
-            cellIds.add(slotToCellId(start + s));
-          }
-        }
-
-        participants[name] = cellIds;
-      }
-
-      return { tz, participants };
-    }
-
-    function base64UrlEncode(uint8Array) {
-      let binary = '';
-      uint8Array.forEach(b => binary += String.fromCharCode(b));
-      return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    }
-
-    function base64UrlDecode(str) {
-      str = str.replace(/-/g, '+').replace(/_/g, '/');
-      while (str.length % 4) str += '=';
-      const binary = atob(str);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      return bytes;
-    }
-
-    // Legacy compact format (for backward compatibility)
-    function encodeCompact(tz, participants) {
-      const tzIdx = getTimezoneIndex(tz);
-      const tzPart = tzIdx !== null ? tzIdx : `~${tz}`;
-
-      const parts = [tzPart];
-      Object.entries(participants).forEach(([name, cellIds]) => {
-        const slots = Array.from(cellIds).map(cellIdToSlot);
-        const encoded = encodeRanges(slots);
-        parts.push(`${encodeURIComponent(name)}:${encoded}`);
-      });
-
-      return parts.join('|');
-    }
-
-    function decodeCompact(str) {
-      const parts = str.split('|');
-      const tzPart = parts[0];
-
-      let tz;
-      if (tzPart.startsWith('~')) {
-        tz = tzPart.slice(1);
-      } else {
-        tz = getTimezoneByIndex(Number(tzPart)) || getLocalTimezone();
-      }
-
-      const participants = {};
-      for (let i = 1; i < parts.length; i++) {
-        const colonIdx = parts[i].indexOf(':');
-        if (colonIdx === -1) continue;
-        const name = decodeURIComponent(parts[i].slice(0, colonIdx));
-        const rangesStr = parts[i].slice(colonIdx + 1);
-        const slots = decodeRanges(rangesStr);
-        participants[name] = new Set(slots.map(slotToCellId));
-      }
-
-      return { tz, participants };
     }
 
     function updateTimezoneDisplay() {
@@ -1313,13 +899,12 @@
     }
 
     function prevWeek() {
-      if (weekOffset > 0) {
-        weekOffset--;
-        generateDays();
-        renderGrid();
-        updateNowIndicator();
-        updateWeekNav();
-      }
+      if (weekOffset === 0) return;
+      weekOffset--;
+      generateDays();
+      renderGrid();
+      updateNowIndicator();
+      updateWeekNav();
     }
 
     function nextWeek() {
@@ -1365,7 +950,8 @@
         startHour = parseInt(startInput.value);
         endHour = parseInt(endInput.value);
 
-                updateTimeRangeLabel();
+        updateTimeRangeLabel();
+        updateRangeHighlight();
         renderGrid();
         updateNowIndicator();
       }
@@ -1373,7 +959,11 @@
       startInput.addEventListener('input', updateRange);
       endInput.addEventListener('input', updateRange);
 
-            updateTimeRangeLabel();
+      updateTimeRangeLabel();
+      updateRangeHighlight();
+
+      // Update on resize since highlight uses pixel positions
+      window.addEventListener('resize', updateRangeHighlight);
     }
 
     function updateTimeRangeLabel() {
@@ -1381,11 +971,35 @@
       label.textContent = `${formatHour(startHour)} – ${formatHour(endHour)}`;
     }
 
+    function updateRangeHighlight() {
+      const startInput = document.getElementById('startTime');
+      const endInput = document.getElementById('endTime');
+      const highlight = document.getElementById('rangeHighlight');
+
+      // Use input's client width for accurate measurement
+      const width = startInput.clientWidth;
+      const start = parseInt(startInput.value);
+      const end = parseInt(endInput.value);
+
+      const startRatio = start / 24;
+      const endRatio = end / 24;
+
+      // Browser positions thumb so its center moves from 6px to (width - 6px)
+      // Add small inset to ensure highlight stays within thumb bounds
+      const thumbHalf = 7;
+      const trackRange = width - thumbHalf * 2;
+
+      const startPos = thumbHalf + startRatio * trackRange;
+      const endPos = thumbHalf + endRatio * trackRange;
+
+      highlight.style.left = startPos + 'px';
+      highlight.style.width = (endPos - startPos) + 'px';
+    }
+
     function formatHour(h) {
-      if (h === 0) return '12 AM';
-      if (h < 12) return h + ' AM';
-      if (h === 12) return '12 PM';
-      return (h - 12) + ' PM';
+      const period = h < 12 ? 'AM' : 'PM';
+      const hour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      return hour + ' ' + period;
     }
 
     function formatDayName(date) {
@@ -1399,10 +1013,6 @@
     function getCellId(dayIndex, hour, quarter) {
       const date = days[dayIndex];
       const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
-      return `${dateStr}-${hour}-${quarter}`;
-    }
-
-    function getCellIdFromDate(dateStr, hour, quarter) {
       return `${dateStr}-${hour}-${quarter}`;
     }
 
@@ -1506,11 +1116,7 @@
           const hour = Math.floor(slot / 4);
           const quarter = slot % 4;
           const cellId = getCellId(day, hour, quarter);
-          if (isAdding) {
-            myAvailability.add(cellId);
-          } else {
-            myAvailability.delete(cellId);
-          }
+          isAdding ? myAvailability.add(cellId) : myAvailability.delete(cellId);
         }
       }
     }
@@ -1545,12 +1151,7 @@
 
     function toggleCell(cellId) {
       if (!cellId) return;
-
-      if (isAdding) {
-        myAvailability.add(cellId);
-      } else {
-        myAvailability.delete(cellId);
-      }
+      isAdding ? myAvailability.add(cellId) : myAvailability.delete(cellId);
       updateGridDisplay();
       autoSave();
     }
@@ -1562,27 +1163,29 @@
       // Set timezone on first save
       if (!eventTimezone) {
         eventTimezone = getLocalTimezone();
+        eventRef.get('timezone').put(eventTimezone);
         updateTimezoneDisplay();
       }
 
-      // Remove old name if changed
+      // Remove old name from Gun if changed
       if (myCurrentName && myCurrentName !== name) {
+        eventRef.get('participants').get(myCurrentName).put(null);
         delete allParticipants[myCurrentName];
       }
       myCurrentName = name;
 
       allParticipants[name] = new Set(myAvailability);
       updateParticipantList();
-      updateURL();
-      pulseCopyButton();
-    }
 
-    function pulseCopyButton() {
-      const btn = document.getElementById('copyBtn');
-      btn.classList.remove('pulse');
-      // Trigger reflow to restart animation
-      void btn.offsetWidth;
-      btn.classList.add('pulse');
+      // Debounce saves to Gun
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(() => {
+        eventRef.get('participants').get(name).put({
+          slots: Array.from(myAvailability).join(','),
+          tz: getLocalTimezone(),
+          updated: Date.now()
+        });
+      }, 300);
     }
 
     document.addEventListener('mouseup', () => {
@@ -1614,10 +1217,7 @@
 
         cells.forEach(cell => {
           const cellId = cell.dataset.cellId;
-          let count = 0;
-          Object.values(allParticipants).forEach(slots => {
-            if (slots.has(cellId)) count++;
-          });
+          const count = Object.values(allParticipants).filter(slots => slots.has(cellId)).length;
 
           cell.className = 'grid-cell';
           cell.innerHTML = '';
@@ -1642,10 +1242,9 @@
           // Add hover for tooltip
           cell.onmouseenter = (e) => {
             if (mode !== 'view') return;
-            const names = [];
-            Object.entries(allParticipants).forEach(([name, slots]) => {
-              if (slots.has(cellId)) names.push(name);
-            });
+            const names = Object.entries(allParticipants)
+              .filter(([, slots]) => slots.has(cellId))
+              .map(([name]) => name);
             if (names.length > 0) {
               tooltip.textContent = names.join(', ');
               tooltip.classList.add('visible');
@@ -1707,16 +1306,17 @@
     function formatTime(minutes) {
       const h = Math.floor(minutes / 60);
       const m = minutes % 60;
-      const period = h >= 12 ? 'pm' : 'am';
+      const period = h < 12 ? 'am' : 'pm';
       const hour = h === 0 ? 12 : h > 12 ? h - 12 : h;
-      return m === 0 ? `${hour}${period}` : `${hour}:${m.toString().padStart(2, '0')}${period}`;
+      if (m === 0) return hour + period;
+      return hour + ':' + m.toString().padStart(2, '0') + period;
     }
 
     function setMode(newMode) {
       mode = newMode;
-      document.querySelectorAll('.mode-toggle button').forEach((btn, i) => {
-        btn.classList.toggle('active', (i === 0 && mode === 'edit') || (i === 1 && mode === 'view'));
-      });
+      const buttons = document.querySelectorAll('.mode-toggle button');
+      buttons[0].classList.toggle('active', mode === 'edit');
+      buttons[1].classList.toggle('active', mode === 'view');
       updateGridDisplay();
     }
 
@@ -1744,77 +1344,67 @@
       });
     }
 
-    function updateURL() {
-      const tz = eventTimezone || getLocalTimezone();
-      const binary = encodeBinary(tz, allParticipants);
-      history.replaceState(null, '', '?d=' + binary);
-    }
+    // Subscribe to Gun.js for real-time updates
+    function subscribeToEvent() {
+      const titleInput = document.getElementById('eventTitle');
 
-    function loadFromURL() {
-      const params = new URLSearchParams(window.location.search);
-      const encoded = params.get('d');
-
-      if (!encoded) return;
-
-      try {
-        // Try binary format first (base64url characters only)
-        if (/^[A-Za-z0-9_-]+$/.test(encoded)) {
-          try {
-            const { tz, participants } = decodeBinary(encoded);
-            eventTimezone = tz;
-            Object.assign(allParticipants, participants);
-            return;
-          } catch (e) {
-            // Not binary, try other formats
-          }
+      // Get event title
+      eventRef.get('title').on((title) => {
+        if (title && document.activeElement !== titleInput) {
+          titleInput.value = title;
+          document.title = `${title} - Overlap`;
         }
+      });
 
-        // Legacy: compact format (starts with number or ~)
-        if (/^(\d+|~)/.test(encoded)) {
-          const { tz, participants } = decodeCompact(encoded);
+      // Get event timezone
+      eventRef.get('timezone').on((tz) => {
+        if (tz && !eventTimezone) {
           eventTimezone = tz;
-          Object.assign(allParticipants, participants);
+          updateTimezoneDisplay();
+        }
+      });
+
+      // Subscribe to all participants
+      eventRef.get('participants').map().on((data, name) => {
+        if (!name) return;
+
+        // Handle deleted participants
+        if (!data || data === null) {
+          delete allParticipants[name];
+          updateParticipantList();
+          updateGridDisplay();
           return;
         }
 
-        // Legacy: LZ decompression
-        let jsonStr = LZ.decompressFromEncodedURIComponent(encoded);
+        // Skip if this is our own data and we're currently editing
+        if (name === myCurrentName) return;
 
-        // Legacy: old base64 format
-        if (!jsonStr || jsonStr.charAt(0) !== '{') {
-          jsonStr = decodeURIComponent(atob(encoded));
-        }
+        // Parse slots
+        const slots = data.slots ? data.slots.split(',').filter(Boolean) : [];
+        allParticipants[name] = new Set(slots);
 
-        const data = JSON.parse(jsonStr);
-        if (data.tz) {
-          eventTimezone = data.tz;
-          Object.entries(data.p || {}).forEach(([name, slots]) => {
-            allParticipants[name] = new Set(slots);
-          });
-        } else {
-          Object.entries(data).forEach(([name, slots]) => {
-            allParticipants[name] = new Set(slots);
-          });
-        }
-      } catch (e) {
-        console.error('Failed to load data from URL');
-      }
+        updateParticipantList();
+        updateGridDisplay();
+      });
+
+      // Title input handler
+      let titleTimeout = null;
+      titleInput.addEventListener('input', () => {
+        clearTimeout(titleTimeout);
+        titleTimeout = setTimeout(() => {
+          const title = titleInput.value.trim();
+          if (title) {
+            eventRef.get('title').put(title);
+            document.title = `${title} - Overlap`;
+          } else {
+            document.title = 'Overlap - Find a time that works for everyone';
+          }
+        }, 300);
+      });
     }
 
     function copyLink() {
       const btn = document.getElementById('copyBtn');
-      const nameInput = document.getElementById('userName');
-      const name = nameInput.value.trim();
-
-      if (!name) {
-        nameInput.focus();
-        nameInput.classList.add('shake');
-        setTimeout(() => nameInput.classList.remove('shake'), 500);
-        return;
-      }
-
-      // Save before copying
-      autoSave();
 
       navigator.clipboard.writeText(window.location.href).then(() => {
         btn.textContent = 'Copied!';
@@ -1830,19 +1420,14 @@
     function updateNowIndicator() {
       const indicator = document.getElementById('nowIndicator');
       const grid = document.getElementById('grid');
-      const now = new Date();
 
-      // Check if today is in the visible days (day 0)
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const firstDay = new Date(days[0]);
-      firstDay.setHours(0, 0, 0, 0);
-
-      if (today.getTime() !== firstDay.getTime()) {
+      // Only show on current week (weekOffset 0)
+      if (weekOffset !== 0) {
         indicator.style.display = 'none';
         return;
       }
 
+      const now = new Date();
       const currentHour = now.getHours();
       const currentMinute = now.getMinutes();
 
@@ -1865,27 +1450,25 @@
       indicator.style.top = topPosition + 'px';
     }
 
-    // Auto-focus name input when typing
+    // Auto-focus name input when typing (but not if in another input)
     document.addEventListener('keydown', (e) => {
-      const nameInput = document.getElementById('userName');
-      if (document.activeElement !== nameInput &&
-          !e.ctrlKey && !e.metaKey && !e.altKey &&
-          e.key.length === 1) {
-        nameInput.focus();
-      }
+      if (document.activeElement.tagName === 'INPUT') return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key.length !== 1) return;
+      document.getElementById('userName').focus();
     });
 
     // Initialize
     initTheme();
     generateDays();
     populateTimeSelectors();
-    loadFromURL();
+    subscribeToEvent();
     renderGrid();
     updateParticipantList();
     updateTimezoneDisplay();
     updateNowIndicator();
     updateWeekNav();
-    setInterval(updateNowIndicator, 60000); // Update every minute
+    setInterval(updateNowIndicator, 60000);
 
     // Auto-focus name input on load
     const nameInput = document.getElementById('userName');

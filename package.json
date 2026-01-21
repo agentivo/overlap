@@ -1,0 +1,13 @@
+{
+  "name": "overlap",
+  "version": "1.0.0",
+  "description": "Find a time that works for everyone",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "setup-tunnel": "python3 scripts/setup_tunnel.py"
+  },
+  "dependencies": {
+    "gun": "^0.2020.1240"
+  }
+}

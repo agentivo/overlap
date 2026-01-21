@@ -212,12 +212,11 @@
       height: 2px;
       background: var(--border);
       border-radius: 1px;
-      left: 2px;
-      right: 2px;
+      left: 6px;
+      right: 6px;
       top: 50%;
       transform: translateY(-50%);
       pointer-events: none;
-      overflow: hidden;
     }
 
     .range-track::before {
@@ -227,7 +226,7 @@
       background: #4caf50;
       border-radius: 1px;
       left: var(--range-left, 0%);
-      right: var(--range-right, 0%);
+      right: calc(var(--range-right, 0%) + 1px);
     }
 
     .range-slider input[type="range"] {
@@ -1391,10 +1390,8 @@
 
     function updateRangeTrack() {
       const track = document.getElementById('rangeTrack');
-      // Account for thumb width (6px radius) in percentage calculation
-      const thumbOffset = 3; // percentage offset for thumb
-      const leftPercent = (startHour / 24) * (100 - thumbOffset * 2) + thumbOffset;
-      const rightPercent = ((24 - endHour) / 24) * (100 - thumbOffset * 2) + thumbOffset;
+      const leftPercent = (startHour / 24) * 100;
+      const rightPercent = ((24 - endHour) / 24) * 100;
       track.style.setProperty('--range-left', leftPercent + '%');
       track.style.setProperty('--range-right', rightPercent + '%');
     }

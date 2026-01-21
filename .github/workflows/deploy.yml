@@ -150,7 +150,7 @@ jobs:
             pkill -f "node server.js" || true
             exit 0
           }
-          trap cleanup SIGTERM SIGINT
+          trap cleanup SIGTERM SIGINT EXIT
 
           generate_app_token() {
             NOW=$(date +%s)
@@ -203,7 +203,8 @@ jobs:
           UPLOAD_INTERVAL=300  # 5 minutes
 
           # Initial backup after 30s to capture early data
-          sleep 30
+          sleep 30 &
+          wait $! 2>/dev/null || true
           upload_data
 
           while true; do
@@ -261,7 +262,9 @@ jobs:
             fi
 
             [ "$ELAPSED" -gt "$DURATION" ] && break
-            sleep 30
+            # Interruptible sleep - allows trap to run on signals
+            sleep 30 &
+            wait $! 2>/dev/null || true
           done
 
           cleanup

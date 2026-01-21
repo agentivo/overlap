@@ -1704,15 +1704,7 @@
     setInterval(updateNowIndicator, 60000); // Update every minute
 
     // Auto-focus name input on load
-    const nameInput = document.getElementById('userName');
-    nameInput.focus();
-
-    // Auto-save when name is entered and there are selections
-    nameInput.addEventListener('input', () => {
-      if (nameInput.value.trim() && myAvailability.size > 0) {
-        autoSave();
-      }
-    });
+    document.getElementById('userName').focus();
   </script>
 </body>
 </html>

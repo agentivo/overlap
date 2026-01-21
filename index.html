@@ -858,6 +858,28 @@
     let eventTimezone = null;
     let lastCell = null;
 
+    // Timezone lookup table (common timezones)
+    const TIMEZONES = [
+      'UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+      'America/Toronto', 'America/Vancouver', 'America/Mexico_City', 'America/Sao_Paulo',
+      'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Madrid', 'Europe/Rome',
+      'Europe/Amsterdam', 'Europe/Brussels', 'Europe/Zurich', 'Europe/Stockholm', 'Europe/Warsaw',
+      'Europe/Lisbon', 'Europe/Dublin', 'Europe/Vienna', 'Europe/Prague', 'Europe/Budapest',
+      'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Hong_Kong', 'Asia/Singapore', 'Asia/Seoul',
+      'Asia/Kolkata', 'Asia/Dubai', 'Asia/Bangkok', 'Asia/Jakarta', 'Asia/Manila',
+      'Australia/Sydney', 'Australia/Melbourne', 'Australia/Brisbane', 'Australia/Perth',
+      'Pacific/Auckland', 'Pacific/Honolulu', 'Africa/Cairo', 'Africa/Johannesburg'
+    ];
+
+    function getTimezoneIndex(tz) {
+      const idx = TIMEZONES.indexOf(tz);
+      return idx >= 0 ? idx : null;
+    }
+
+    function getTimezoneByIndex(idx) {
+      return TIMEZONES[idx] || null;
+    }
+
     // Timezone
     function getLocalTimezone() {
       return Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -871,6 +893,91 @@
       } catch {
         return tz;
       }
+    }
+
+    // Compact encoding helpers
+    function cellIdToSlot(cellId) {
+      const [day, hour, quarter] = cellId.split('-').map(Number);
+      return day * 96 + hour * 4 + quarter;
+    }
+
+    function slotToCellId(slot) {
+      const day = Math.floor(slot / 96);
+      const remainder = slot % 96;
+      const hour = Math.floor(remainder / 4);
+      const quarter = remainder % 4;
+      return `${day}-${hour}-${quarter}`;
+    }
+
+    function encodeRanges(slots) {
+      if (slots.length === 0) return '';
+      const sorted = [...slots].sort((a, b) => a - b);
+      const ranges = [];
+      let start = sorted[0], len = 1;
+
+      for (let i = 1; i < sorted.length; i++) {
+        if (sorted[i] === sorted[i-1] + 1) {
+          len++;
+        } else {
+          ranges.push(len === 1 ? `${start}` : `${start}-${len}`);
+          start = sorted[i];
+          len = 1;
+        }
+      }
+      ranges.push(len === 1 ? `${start}` : `${start}-${len}`);
+      return ranges.join(',');
+    }
+
+    function decodeRanges(str) {
+      if (!str) return [];
+      const slots = [];
+      str.split(',').forEach(part => {
+        if (part.includes('-')) {
+          const [start, len] = part.split('-').map(Number);
+          for (let i = 0; i < len; i++) slots.push(start + i);
+        } else {
+          slots.push(Number(part));
+        }
+      });
+      return slots;
+    }
+
+    function encodeCompact(tz, participants) {
+      const tzIdx = getTimezoneIndex(tz);
+      const tzPart = tzIdx !== null ? tzIdx : `~${tz}`;
+
+      const parts = [tzPart];
+      Object.entries(participants).forEach(([name, cellIds]) => {
+        const slots = Array.from(cellIds).map(cellIdToSlot);
+        const encoded = encodeRanges(slots);
+        parts.push(`${encodeURIComponent(name)}:${encoded}`);
+      });
+
+      return parts.join('|');
+    }
+
+    function decodeCompact(str) {
+      const parts = str.split('|');
+      const tzPart = parts[0];
+
+      let tz;
+      if (tzPart.startsWith('~')) {
+        tz = tzPart.slice(1);
+      } else {
+        tz = getTimezoneByIndex(Number(tzPart)) || getLocalTimezone();
+      }
+
+      const participants = {};
+      for (let i = 1; i < parts.length; i++) {
+        const colonIdx = parts[i].indexOf(':');
+        if (colonIdx === -1) continue;
+        const name = decodeURIComponent(parts[i].slice(0, colonIdx));
+        const rangesStr = parts[i].slice(colonIdx + 1);
+        const slots = decodeRanges(rangesStr);
+        participants[name] = new Set(slots.map(slotToCellId));
+      }
+
+      return { tz, participants };
     }
 
     function updateTimezoneDisplay() {
@@ -1211,15 +1318,9 @@
     }
 
     function updateURL() {
-      const data = {
-        tz: eventTimezone || getLocalTimezone(),
-        p: {}
-      };
-      Object.entries(allParticipants).forEach(([name, slots]) => {
-        data.p[name] = Array.from(slots);
-      });
-      const compressed = LZ.compressToEncodedURIComponent(JSON.stringify(data));
-      history.replaceState(null, '', '?d=' + compressed);
+      const tz = eventTimezone || getLocalTimezone();
+      const compact = encodeCompact(tz, allParticipants);
+      history.replaceState(null, '', '?d=' + compact);
     }
 
     function loadFromURL() {
@@ -1227,7 +1328,15 @@
       const encoded = params.get('d');
       if (encoded) {
         try {
-          // Try LZ decompression first
+          // Try compact format first (starts with number or ~)
+          if (/^(\d+|~)/.test(encoded)) {
+            const { tz, participants } = decodeCompact(encoded);
+            eventTimezone = tz;
+            Object.assign(allParticipants, participants);
+            return;
+          }
+
+          // Try LZ decompression
           let jsonStr = LZ.decompressFromEncodedURIComponent(encoded);
 
           // Fallback to old base64 format
@@ -1236,7 +1345,6 @@
           }
 
           const data = JSON.parse(jsonStr);
-          // Handle both old format (direct participants) and new format (with timezone)
           if (data.tz) {
             eventTimezone = data.tz;
             Object.entries(data.p || {}).forEach(([name, slots]) => {

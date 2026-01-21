@@ -21,8 +21,9 @@ setup-tunnel:
 setup-data:
 	@openssl rand -base64 32 | gh secret set DATA_KEY --repo $(REPO)
 	@echo "DATA_KEY secret set"
-	@git ls-remote --heads origin data >/dev/null 2>&1 || \
-		(git switch --orphan data && git commit --allow-empty -m "init" && git push origin data && git switch main)
+	@if [ -z "$$(git ls-remote --heads origin data)" ]; then \
+		git switch --orphan data && git commit --allow-empty -m "init" && git push origin data && git switch main; \
+	fi
 	@echo "data branch ready"
 
 deploy:

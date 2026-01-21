@@ -202,7 +202,6 @@
     }
 
     .range-slider {
-      --thumb-size: 12px;
       position: relative;
       height: 24px;
       margin: 8px 0;
@@ -213,8 +212,8 @@
       height: 2px;
       background: var(--border);
       border-radius: 1px;
-      left: calc(var(--thumb-size) / 2);
-      right: calc(var(--thumb-size) / 2);
+      left: 6px;
+      right: 6px;
       top: 50%;
       transform: translateY(-50%);
       pointer-events: none;
@@ -226,8 +225,8 @@
       height: 100%;
       background: #4caf50;
       border-radius: 1px;
-      left: var(--range-left, 0%);
-      right: var(--range-right, 0%);
+      left: var(--range-left, 0px);
+      width: var(--range-width, 0px);
     }
 
     .range-slider input[type="range"] {
@@ -253,8 +252,8 @@
     .range-slider input[type="range"]::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
-      width: var(--thumb-size, 12px);
-      height: var(--thumb-size, 12px);
+      width: 12px;
+      height: 12px;
       background: #4caf50;
       border-radius: 50%;
       cursor: pointer;
@@ -275,8 +274,8 @@
     }
 
     .range-slider input[type="range"]::-moz-range-thumb {
-      width: var(--thumb-size, 12px);
-      height: var(--thumb-size, 12px);
+      width: 12px;
+      height: 12px;
       background: #4caf50;
       border-radius: 50%;
       cursor: pointer;
@@ -1391,10 +1390,16 @@
 
     function updateRangeTrack() {
       const track = document.getElementById('rangeTrack');
-      const leftPercent = (startHour / 24) * 100;
-      const rightPercent = ((24 - endHour) / 24) * 100;
-      track.style.setProperty('--range-left', leftPercent + '%');
-      track.style.setProperty('--range-right', rightPercent + '%');
+      const trackWidth = track.offsetWidth;
+      const thumbSize = 12; // Must match CSS thumb width
+
+      // Calculate thumb center positions (browser insets thumbs by half their size)
+      const usableWidth = trackWidth;
+      const leftPos = (startHour / 24) * usableWidth;
+      const rightPos = (endHour / 24) * usableWidth;
+
+      track.style.setProperty('--range-left', leftPos + 'px');
+      track.style.setProperty('--range-width', (rightPos - leftPos) + 'px');
     }
 
     function updateTimeRangeLabel() {
@@ -1907,6 +1912,7 @@
     updateNowIndicator();
     updateWeekNav();
     setInterval(updateNowIndicator, 60000); // Update every minute
+    window.addEventListener('resize', updateRangeTrack);
 
     // Auto-focus name input on load
     const nameInput = document.getElementById('userName');

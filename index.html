@@ -796,7 +796,7 @@
     // Gun.js setup - connect to same-origin relay
     const gun = Gun({
       peers: [location.origin + '/gun'],
-      localStorage: true
+      localStorage: false
     });
 
     // Get or create event ID from URL

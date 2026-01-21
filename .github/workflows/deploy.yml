@@ -41,11 +41,15 @@ jobs:
 
           if [ -n "$CONTENT" ]; then
             echo "$CONTENT" | base64 -d > radata.enc
-            openssl enc -aes-256-cbc -pbkdf2 -d -in radata.enc -out radata.tar.gz -pass pass:"$DATA_KEY"
-            tar -xzf radata.tar.gz
-            rm radata.tar.gz radata.enc
-            echo "Restored data from data branch"
-            ls -la radata
+            if openssl enc -aes-256-cbc -pbkdf2 -d -in radata.enc -out radata.tar.gz -pass pass:"$DATA_KEY" 2>/dev/null; then
+              tar -xzf radata.tar.gz
+              rm radata.tar.gz radata.enc
+              echo "Restored data from data branch"
+              ls -la radata
+            else
+              echo "WARNING: Failed to decrypt data (key may have changed)"
+              rm -f radata.enc radata.tar.gz
+            fi
           else
             echo "No previous data found, starting fresh"
           fi

@@ -6,7 +6,7 @@ help:
 	@echo "Setup:"
 	@echo "  setup          Run full setup (tunnel + data key)"
 	@echo "  setup-tunnel   Configure Cloudflare tunnel"
-	@echo "  setup-data     Create data branch and DATA_KEY secret"
+	@echo "  setup-data     Create data branch and DATA_KEY (if not exists)"
 	@echo ""
 	@echo "Operations:"
 	@echo "  deploy         Trigger deploy workflow"
@@ -19,8 +19,12 @@ setup-tunnel:
 	python3 scripts/setup_tunnel.py
 
 setup-data:
-	@openssl rand -base64 32 | gh secret set DATA_KEY --repo $(REPO)
-	@echo "DATA_KEY secret set"
+	@if gh secret list --repo $(REPO) | grep -q DATA_KEY; then \
+		echo "DATA_KEY already exists (use setup-data-rotate to change)"; \
+	else \
+		openssl rand -base64 32 | gh secret set DATA_KEY --repo $(REPO) && \
+		echo "DATA_KEY secret set"; \
+	fi
 	@if [ -z "$$(git ls-remote --heads origin data)" ]; then \
 		TREE=$$(gh api repos/$(REPO)/git/trees -f 'tree[][path]=.gitkeep' -f 'tree[][mode]=100644' -f 'tree[][type]=blob' -f 'tree[][content]=' --jq '.sha') && \
 		COMMIT=$$(gh api repos/$(REPO)/git/commits -f message="init" -f tree="$$TREE" --jq '.sha') && \
@@ -28,6 +32,10 @@ setup-data:
 		echo "data branch created"; \
 	fi
 	@echo "data branch ready"
+
+setup-data-rotate:
+	@openssl rand -base64 32 | gh secret set DATA_KEY --repo $(REPO)
+	@echo "DATA_KEY rotated (old data will be unreadable)"
 
 deploy:
 	gh workflow run deploy.yml --repo $(REPO)

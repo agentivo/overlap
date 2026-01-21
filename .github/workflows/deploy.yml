@@ -27,6 +27,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download persisted data
+        continue-on-error: true
+        run: |
+          # Download from most recent run with this artifact
+          gh run download --name radata-backup --dir . 2>/dev/null && echo "Restored data from previous run" || echo "No previous data found, starting fresh"
+          # Handle tar.gz if periodic backup was used
+          if [ -f radata.tar.gz ]; then
+            tar -xzf radata.tar.gz
+            rm radata.tar.gz
+          fi
+          ls -la radata 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Find previous workflow
         id: find_previous
         env:
@@ -84,8 +98,54 @@ jobs:
         env:
           APP_ID: ${{ secrets.APP_ID }}
           APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          ACTIONS_RUNTIME_TOKEN: ${{ env.ACTIONS_RUNTIME_TOKEN }}
+          ACTIONS_RUNTIME_URL: ${{ env.ACTIONS_RUNTIME_URL }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
         run: |
+          upload_data() {
+            if [ ! -d "radata" ]; then
+              echo "No radata directory to upload"
+              return
+            fi
+
+            # Create tar archive
+            tar -czf radata.tar.gz radata
+            FILE_SIZE=$(stat -c%s radata.tar.gz 2>/dev/null || stat -f%z radata.tar.gz)
+
+            # Create artifact container
+            ARTIFACT_URL="${ACTIONS_RUNTIME_URL}_apis/pipelines/workflows/${GITHUB_RUN_ID}/artifacts?api-version=6.0-preview"
+            CREATE_RESPONSE=$(curl -s -X POST "$ARTIFACT_URL" \
+              -H "Authorization: Bearer $ACTIONS_RUNTIME_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"type\":\"actions_storage\",\"name\":\"radata-backup\"}")
+
+            UPLOAD_URL=$(echo "$CREATE_RESPONSE" | jq -r '.fileContainerResourceUrl')
+            if [ -z "$UPLOAD_URL" ] || [ "$UPLOAD_URL" = "null" ]; then
+              echo "Failed to create artifact container"
+              return
+            fi
+
+            # Upload file
+            curl -s -X PUT "${UPLOAD_URL}?itemPath=radata.tar.gz" \
+              -H "Authorization: Bearer $ACTIONS_RUNTIME_TOKEN" \
+              -H "Content-Type: application/octet-stream" \
+              -H "Content-Length: $FILE_SIZE" \
+              -H "Content-Range: bytes 0-$((FILE_SIZE-1))/$FILE_SIZE" \
+              --data-binary @radata.tar.gz > /dev/null
+
+            # Finalize
+            curl -s -X PATCH "$ARTIFACT_URL&artifactName=radata-backup" \
+              -H "Authorization: Bearer $ACTIONS_RUNTIME_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"size\":$FILE_SIZE}" > /dev/null
+
+            rm radata.tar.gz
+            echo "Data uploaded successfully"
+          }
+
           cleanup() {
+            echo "Uploading data before shutdown..."
+            upload_data
             pkill -f "node server.js" || true
             exit 0
           }
@@ -138,6 +198,9 @@ jobs:
 
           echo "Duration: ${DURATION_HOURS}h | Auto-restart: $AUTO_RESTART"
 
+          LAST_UPLOAD=0
+          UPLOAD_INTERVAL=1800  # 30 minutes
+
           while true; do
             ELAPSED=$(($(date +%s) - START_TIME))
             REMAINING=$((DURATION - ELAPSED))
@@ -149,11 +212,21 @@ jobs:
               sleep 2
             fi
 
+            # Periodic data backup
+            if [ $((ELAPSED - LAST_UPLOAD)) -ge $UPLOAD_INTERVAL ]; then
+              echo "Periodic backup..."
+              upload_data
+              LAST_UPLOAD=$ELAPSED
+            fi
+
             printf "[%s] Overlap running | %dm elapsed | %dm remaining\n" \
               "$(date '+%H:%M:%S')" "$((ELAPSED/60))" "$((REMAINING/60))"
 
             if [ "$ELAPSED" -gt "$RESTART_THRESHOLD" ] && [ "$RESTART_TRIGGERED" = "false" ]; then
               if [ "$AUTO_RESTART" = "true" ] && [ -n "$APP_ID" ] && [ -n "$APP_PRIVATE_KEY" ]; then
+                echo "Uploading data before restart..."
+                upload_data
+
                 echo "Generating fresh token and triggering restart..."
 
                 APP_TOKEN=$(generate_app_token)
@@ -187,3 +260,13 @@ jobs:
           done
 
           cleanup
+
+      - name: Final data backup
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: radata-backup
+          path: radata
+          retention-days: 90
+          if-no-files-found: ignore
+          overwrite: true

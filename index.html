@@ -202,6 +202,7 @@
     }
 
     .range-slider {
+      --thumb-size: 12px;
       position: relative;
       height: 24px;
       margin: 8px 0;
@@ -212,8 +213,8 @@
       height: 2px;
       background: var(--border);
       border-radius: 1px;
-      left: 6px;
-      right: 6px;
+      left: calc(var(--thumb-size) / 2);
+      right: calc(var(--thumb-size) / 2);
       top: 50%;
       transform: translateY(-50%);
       pointer-events: none;
@@ -226,7 +227,7 @@
       background: #4caf50;
       border-radius: 1px;
       left: var(--range-left, 0%);
-      right: calc(var(--range-right, 0%) + 3px);
+      right: var(--range-right, 0%);
     }
 
     .range-slider input[type="range"] {
@@ -252,8 +253,8 @@
     .range-slider input[type="range"]::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
-      width: 12px;
-      height: 12px;
+      width: var(--thumb-size, 12px);
+      height: var(--thumb-size, 12px);
       background: #4caf50;
       border-radius: 50%;
       cursor: pointer;
@@ -274,8 +275,8 @@
     }
 
     .range-slider input[type="range"]::-moz-range-thumb {
-      width: 12px;
-      height: 12px;
+      width: var(--thumb-size, 12px);
+      height: var(--thumb-size, 12px);
       background: #4caf50;
       border-radius: 50%;
       cursor: pointer;

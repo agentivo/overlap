@@ -270,6 +270,43 @@
       box-shadow: 0 1px 2px var(--shadow);
     }
 
+    .week-nav {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .nav-btn {
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--border);
+      background: var(--bg-secondary);
+      color: var(--text);
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      transition: all 0.2s;
+    }
+
+    .nav-btn:hover:not(:disabled) {
+      background: var(--border);
+    }
+
+    .nav-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .week-label {
+      font-size: 0.8125rem;
+      color: var(--text-secondary);
+      min-width: 100px;
+      text-align: center;
+    }
+
     .legend {
       display: flex;
       align-items: center;
@@ -573,6 +610,11 @@
           <div class="mode-toggle">
             <button class="active" onclick="setMode('edit')">Edit</button>
             <button onclick="setMode('view')">View Group</button>
+          </div>
+          <div class="week-nav">
+            <button class="nav-btn" id="prevWeek" onclick="prevWeek()" disabled>◀</button>
+            <span class="week-label" id="weekLabel"></span>
+            <button class="nav-btn" id="nextWeek" onclick="nextWeek()">▶</button>
           </div>
           <div class="legend">
             <span>None</span>
@@ -891,6 +933,7 @@
     let allParticipants = {};
     let eventTimezone = null;
     let lastCell = null;
+    let weekOffset = 0;
 
     // Timezone lookup table (common timezones)
     const TIMEZONES = [
@@ -1140,15 +1183,44 @@
       }
     }
 
-    // Generate next 7 days
+    // Generate 7 days starting from offset
     function generateDays() {
       const today = new Date();
       days = [];
       for (let i = 0; i < 7; i++) {
         const date = new Date(today);
-        date.setDate(today.getDate() + i);
+        date.setDate(today.getDate() + weekOffset * 7 + i);
         days.push(date);
       }
+    }
+
+    function prevWeek() {
+      if (weekOffset > 0) {
+        weekOffset--;
+        generateDays();
+        renderGrid();
+        updateNowIndicator();
+        updateWeekNav();
+      }
+    }
+
+    function nextWeek() {
+      weekOffset++;
+      generateDays();
+      renderGrid();
+      updateNowIndicator();
+      updateWeekNav();
+    }
+
+    function updateWeekNav() {
+      document.getElementById('prevWeek').disabled = weekOffset === 0;
+
+      const startDate = days[0];
+      const endDate = days[days.length - 1];
+      const opts = { month: 'short', day: 'numeric' };
+      const start = startDate.toLocaleDateString('en-US', opts);
+      const end = endDate.toLocaleDateString('en-US', opts);
+      document.getElementById('weekLabel').textContent = `${start} – ${end}`;
     }
 
     // Populate time selectors
@@ -1595,6 +1667,7 @@
     updateParticipantList();
     updateTimezoneDisplay();
     updateNowIndicator();
+    updateWeekNav();
     setInterval(updateNowIndicator, 60000); // Update every minute
 
     // Auto-focus name input on load

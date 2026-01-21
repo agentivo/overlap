@@ -1390,13 +1390,21 @@
 
     function updateRangeTrack() {
       const track = document.getElementById('rangeTrack');
-      const trackWidth = track.offsetWidth;
+      const slider = document.getElementById('startTime');
+      const sliderWidth = slider.offsetWidth;
       const thumbSize = 12; // Must match CSS thumb width
+      const trackInset = 6; // Must match CSS track left/right inset
 
-      // Calculate thumb center positions (browser insets thumbs by half their size)
-      const usableWidth = trackWidth;
-      const leftPos = (startHour / 24) * usableWidth;
-      const rightPos = (endHour / 24) * usableWidth;
+      // Browser positions thumb center within (sliderWidth - thumbSize) range
+      // Thumb center at min: thumbSize/2, at max: sliderWidth - thumbSize/2
+      const usableRange = sliderWidth - thumbSize;
+
+      const leftThumbCenter = (thumbSize / 2) + (startHour / 24) * usableRange;
+      const rightThumbCenter = (thumbSize / 2) + (endHour / 24) * usableRange;
+
+      // Convert to track-relative positions (track is inset by trackInset)
+      const leftPos = leftThumbCenter - trackInset;
+      const rightPos = rightThumbCenter - trackInset;
 
       track.style.setProperty('--range-left', leftPos + 'px');
       track.style.setProperty('--range-width', (rightPos - leftPos) + 'px');

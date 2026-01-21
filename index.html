@@ -1435,23 +1435,26 @@
     function updateURL() {
       const tz = eventTimezone || getLocalTimezone();
       const binary = encodeBinary(tz, allParticipants);
-      history.replaceState(null, '', '?v=2&d=' + binary);
+      history.replaceState(null, '', '?d=' + binary);
     }
 
     function loadFromURL() {
       const params = new URLSearchParams(window.location.search);
-      const version = params.get('v');
       const encoded = params.get('d');
 
       if (!encoded) return;
 
       try {
-        // Version 2: binary format
-        if (version === '2') {
-          const { tz, participants } = decodeBinary(encoded);
-          eventTimezone = tz;
-          Object.assign(allParticipants, participants);
-          return;
+        // Try binary format first (base64url characters only)
+        if (/^[A-Za-z0-9_-]+$/.test(encoded)) {
+          try {
+            const { tz, participants } = decodeBinary(encoded);
+            eventTimezone = tz;
+            Object.assign(allParticipants, participants);
+            return;
+          } catch (e) {
+            // Not binary, try other formats
+          }
         }
 
         // Legacy: compact format (starts with number or ~)

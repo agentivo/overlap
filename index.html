@@ -195,26 +195,71 @@
       color: var(--text-secondary);
     }
 
-    .time-range {
-      display: flex;
-      gap: 0.5rem;
-      align-items: center;
+    .range-label {
       color: var(--text-secondary);
+      font-weight: 400;
     }
 
-    .time-range select {
-      flex: 1;
-      padding: 0.625rem 2rem 0.625rem 0.75rem;
-      border: 1px solid var(--border-input);
-      border-radius: 8px;
-      font-size: 0.875rem;
-      background: var(--bg-secondary);
-      color: var(--text);
+    .range-slider {
+      position: relative;
+      height: 36px;
+      display: flex;
+      align-items: center;
+    }
+
+    .range-track {
+      position: absolute;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      left: 0;
+      right: 0;
+      pointer-events: none;
+    }
+
+    .range-track::before {
+      content: '';
+      position: absolute;
+      height: 100%;
+      background: #4caf50;
+      border-radius: 3px;
+      left: var(--range-left, 0%);
+      right: var(--range-right, 0%);
+    }
+
+    .range-slider input[type="range"] {
+      position: absolute;
+      width: 100%;
+      height: 6px;
+      background: transparent;
+      pointer-events: none;
+      -webkit-appearance: none;
       appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2386868b' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 0.75rem center;
+      margin: 0;
+    }
+
+    .range-slider input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      background: #4caf50;
+      border-radius: 50%;
       cursor: pointer;
+      pointer-events: auto;
+      border: 2px solid var(--bg-card);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    .range-slider input[type="range"]::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      background: #4caf50;
+      border-radius: 50%;
+      cursor: pointer;
+      pointer-events: auto;
+      border: 2px solid var(--bg-card);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     }
 
     .participants {
@@ -625,11 +670,11 @@
         </div>
 
         <div class="form-group">
-          <label>Hours to show</label>
-          <div class="time-range">
-            <select id="startTime"></select>
-            <span>to</span>
-            <select id="endTime"></select>
+          <label>Hours to show <span id="timeRangeLabel" class="range-label"></span></label>
+          <div class="range-slider">
+            <div class="range-track" id="rangeTrack"></div>
+            <input type="range" id="startTime" min="0" max="23" value="9">
+            <input type="range" id="endTime" min="1" max="24" value="17">
           </div>
         </div>
 
@@ -1279,30 +1324,54 @@
       document.getElementById('weekLabel').textContent = `${start} – ${end}`;
     }
 
-    // Populate time selectors
+    // Time range slider
     function populateTimeSelectors() {
-      const startSelect = document.getElementById('startTime');
-      const endSelect = document.getElementById('endTime');
+      const startInput = document.getElementById('startTime');
+      const endInput = document.getElementById('endTime');
 
-      for (let h = 0; h < 24; h++) {
-        const label = formatHour(h);
-        startSelect.options.add(new Option(label, h));
-        endSelect.options.add(new Option(label, h));
+      startInput.value = startHour;
+      endInput.value = endHour;
+
+      function updateRange() {
+        const start = parseInt(startInput.value);
+        const end = parseInt(endInput.value);
+
+        // Prevent crossing
+        if (start >= end) {
+          if (this === startInput) {
+            startInput.value = end - 1;
+          } else {
+            endInput.value = start + 1;
+          }
+        }
+
+        startHour = parseInt(startInput.value);
+        endHour = parseInt(endInput.value);
+
+        updateRangeTrack();
+        updateTimeRangeLabel();
+        renderGrid();
+        updateNowIndicator();
       }
 
-      startSelect.value = startHour;
-      endSelect.value = endHour;
+      startInput.addEventListener('input', updateRange);
+      endInput.addEventListener('input', updateRange);
 
-      startSelect.onchange = () => {
-        startHour = parseInt(startSelect.value);
-        renderGrid();
-        updateNowIndicator();
-      };
-      endSelect.onchange = () => {
-        endHour = parseInt(endSelect.value);
-        renderGrid();
-        updateNowIndicator();
-      };
+      updateRangeTrack();
+      updateTimeRangeLabel();
+    }
+
+    function updateRangeTrack() {
+      const track = document.getElementById('rangeTrack');
+      const leftPercent = (startHour / 24) * 100;
+      const rightPercent = ((24 - endHour) / 24) * 100;
+      track.style.setProperty('--range-left', leftPercent + '%');
+      track.style.setProperty('--range-right', rightPercent + '%');
+    }
+
+    function updateTimeRangeLabel() {
+      const label = document.getElementById('timeRangeLabel');
+      label.textContent = `${formatHour(startHour)} – ${formatHour(endHour)}`;
     }
 
     function formatHour(h) {

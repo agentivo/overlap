@@ -984,17 +984,28 @@
     }
 
     // Compact encoding helpers
+    const EPOCH = new Date('2024-01-01').getTime();
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
     function cellIdToSlot(cellId) {
-      const [day, hour, quarter] = cellId.split('-').map(Number);
-      return day * 96 + hour * 4 + quarter;
+      // Format: YYYY-MM-DD-hour-quarter
+      const parts = cellId.split('-');
+      const dateStr = parts.slice(0, 3).join('-');
+      const hour = parseInt(parts[3]);
+      const quarter = parseInt(parts[4]);
+      const date = new Date(dateStr);
+      const daysSinceEpoch = Math.floor((date.getTime() - EPOCH) / DAY_MS);
+      return daysSinceEpoch * 96 + hour * 4 + quarter;
     }
 
     function slotToCellId(slot) {
-      const day = Math.floor(slot / 96);
+      const daysSinceEpoch = Math.floor(slot / 96);
       const remainder = slot % 96;
       const hour = Math.floor(remainder / 4);
       const quarter = remainder % 4;
-      return `${day}-${hour}-${quarter}`;
+      const date = new Date(EPOCH + daysSinceEpoch * DAY_MS);
+      const dateStr = date.toISOString().split('T')[0];
+      return `${dateStr}-${hour}-${quarter}`;
     }
 
     function encodeRanges(slots) {
@@ -1075,10 +1086,11 @@
         bytes.push(ranges.length & 0xFF);
         bytes.push((ranges.length >> 8) & 0xFF);
 
-        // Each range: start (2 bytes) + length (1 byte)
+        // Each range: start (3 bytes) + length (1 byte)
         ranges.forEach(([start, len]) => {
           bytes.push(start & 0xFF);
           bytes.push((start >> 8) & 0xFF);
+          bytes.push((start >> 16) & 0xFF);
           bytes.push(len);
         });
       });
@@ -1115,8 +1127,8 @@
 
         const cellIds = new Set();
         for (let r = 0; r < numRanges; r++) {
-          const start = bytes[pos] | (bytes[pos + 1] << 8);
-          pos += 2;
+          const start = bytes[pos] | (bytes[pos + 1] << 8) | (bytes[pos + 2] << 16);
+          pos += 3;
           const len = bytes[pos++];
           for (let s = 0; s < len; s++) {
             cellIds.add(slotToCellId(start + s));
@@ -1276,7 +1288,13 @@
     }
 
     function getCellId(dayIndex, hour, quarter) {
-      return `${dayIndex}-${hour}-${quarter}`;
+      const date = days[dayIndex];
+      const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+      return `${dateStr}-${hour}-${quarter}`;
+    }
+
+    function getCellIdFromDate(dateStr, hour, quarter) {
+      return `${dateStr}-${hour}-${quarter}`;
     }
 
     function renderGrid() {

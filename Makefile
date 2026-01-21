@@ -22,7 +22,10 @@ setup-data:
 	@openssl rand -base64 32 | gh secret set DATA_KEY --repo $(REPO)
 	@echo "DATA_KEY secret set"
 	@if [ -z "$$(git ls-remote --heads origin data)" ]; then \
-		git switch --orphan data && git commit --allow-empty -m "init" && git push origin data && git switch main; \
+		TREE=$$(gh api repos/$(REPO)/git/trees -f 'tree[][path]=.gitkeep' -f 'tree[][mode]=100644' -f 'tree[][type]=blob' -f 'tree[][content]=' --jq '.sha') && \
+		COMMIT=$$(gh api repos/$(REPO)/git/commits -f message="init" -f tree="$$TREE" --jq '.sha') && \
+		gh api repos/$(REPO)/git/refs -f ref="refs/heads/data" -f sha="$$COMMIT" > /dev/null && \
+		echo "data branch created"; \
 	fi
 	@echo "data branch ready"
 

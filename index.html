@@ -382,12 +382,18 @@
       color: var(--text-secondary);
     }
 
+    .btn-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
     .btn {
-      width: 100%;
+      flex: 1;
       padding: 0.75rem;
       border: none;
       border-radius: 8px;
-      font-size: 0.9375rem;
+      font-size: 0.875rem;
       font-weight: 500;
       cursor: pointer;
       transition: all 0.2s;
@@ -405,7 +411,6 @@
     .btn-secondary {
       background: var(--bg-secondary);
       color: var(--text);
-      margin-top: 0.5rem;
       border: 1px solid var(--border);
     }
 
@@ -414,7 +419,6 @@
     }
 
     .btn-copy {
-      margin-top: 0.5rem;
       background: rgba(76, 175, 80, 0.15);
       color: #4caf50;
       border: 1px solid rgba(76, 175, 80, 0.3);
@@ -518,8 +522,10 @@
           </div>
         </div>
 
-        <button class="btn btn-secondary" onclick="clearMyAvailability()">Clear Selection</button>
-        <button class="btn btn-copy" id="copyBtn" onclick="copyLink()">Copy Share Link</button>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="clearMyAvailability()">Clear</button>
+          <button class="btn btn-copy" id="copyBtn" onclick="copyLink()">Share Link</button>
+        </div>
 
         <div class="participants">
           <h2>Participants</h2>
@@ -1253,7 +1259,7 @@
         btn.textContent = 'Copied!';
         btn.classList.add('copied');
         setTimeout(() => {
-          btn.textContent = 'Copy Share Link';
+          btn.textContent = 'Share Link';
           btn.classList.remove('copied');
         }, 2000);
       });

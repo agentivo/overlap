@@ -10,7 +10,8 @@
       "Bash(gh secret:*)",
       "Bash(xargs:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ]
   }
 }

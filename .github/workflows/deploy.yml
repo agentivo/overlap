@@ -196,12 +196,7 @@ jobs:
           echo "Duration: ${DURATION_HOURS}h | Auto-restart: $AUTO_RESTART"
 
           LAST_UPLOAD=0
-          UPLOAD_INTERVAL=300  # 5 minutes
-
-          # Initial backup after 30s to capture early data
-          sleep 30 &
-          wait $! 2>/dev/null || true
-          upload_data
+          UPLOAD_INTERVAL=1800  # 30 minutes
 
           while true; do
             ELAPSED=$(($(date +%s) - START_TIME))

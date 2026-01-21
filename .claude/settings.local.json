@@ -8,7 +8,9 @@
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
       "Bash(gh secret:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

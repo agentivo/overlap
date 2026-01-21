@@ -27,13 +27,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Find and cancel previous workflow
+        id: find_previous
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PREVIOUS_RUN_ID=$(curl -s \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy.yml/runs?status=in_progress" \
+            | jq -r ".workflow_runs[] | select(.id < ${{ github.run_id }}) | .id" | head -1)
+
+          if [ -n "$PREVIOUS_RUN_ID" ] && [ "$PREVIOUS_RUN_ID" != "null" ]; then
+            echo "Found previous run: $PREVIOUS_RUN_ID - cancelling..."
+            curl -s -X POST \
+              -H "Authorization: token $GH_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/runs/$PREVIOUS_RUN_ID/cancel"
+            echo "Waiting 45s for previous instance to backup and shutdown..."
+            sleep 45
+          else
+            echo "No previous run found"
+          fi
+
       - name: Download persisted data
         continue-on-error: true
         env:
           DATA_KEY: ${{ secrets.DATA_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Download from data branch via API
+          # Download from data branch via API (after old workflow pushed its data)
           RESPONSE=$(curl -s -H "Authorization: token $GH_TOKEN" \
             "https://api.github.com/repos/agentivo/overlap/contents/radata.enc?ref=data")
 
@@ -54,32 +84,6 @@ jobs:
             echo "No previous data found, starting fresh"
           fi
 
-      - name: Find previous workflow
-        id: find_previous
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PREVIOUS_RUN_ID=$(curl -s \
-            -H "Authorization: token $GH_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy.yml/runs?status=in_progress" \
-            | jq -r ".workflow_runs[] | select(.id < ${{ github.run_id }}) | .id" | head -1)
-
-          if [ -n "$PREVIOUS_RUN_ID" ] && [ "$PREVIOUS_RUN_ID" != "null" ]; then
-            echo "previous_run_id=$PREVIOUS_RUN_ID" >> $GITHUB_OUTPUT
-            echo "Found previous run: $PREVIOUS_RUN_ID"
-          else
-            echo "previous_run_id=" >> $GITHUB_OUTPUT
-            echo "No previous run found"
-          fi
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Install dependencies
-        run: npm install
-
       - name: Start server
         run: |
           node server.js &
@@ -94,18 +98,6 @@ jobs:
           ./cloudflared tunnel --url http://localhost:3000 --no-autoupdate run --token "${{ secrets.TUNNEL_TOKEN }}" &
           sleep 5
           echo "Tunnel started"
-
-      - name: Cancel previous workflow
-        if: steps.find_previous.outputs.previous_run_id != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          curl -s -X POST \
-            -H "Authorization: token $GH_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ steps.find_previous.outputs.previous_run_id }}/cancel"
-          echo "Graceful handoff: waiting 30s for previous instance to shutdown"
-          sleep 30
 
       - name: Monitor
         env:

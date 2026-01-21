@@ -430,6 +430,15 @@
       border-color: #4caf50;
     }
 
+    .btn-copy.pulse {
+      animation: pulse 0.6s ease-out;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.5); }
+      100% { box-shadow: 0 0 0 12px rgba(76, 175, 80, 0); }
+    }
+
     .tooltip {
       position: absolute;
       background: var(--tooltip-bg);
@@ -1094,6 +1103,15 @@
       allParticipants[name] = new Set(myAvailability);
       updateParticipantList();
       updateURL();
+      pulseCopyButton();
+    }
+
+    function pulseCopyButton() {
+      const btn = document.getElementById('copyBtn');
+      btn.classList.remove('pulse');
+      // Trigger reflow to restart animation
+      void btn.offsetWidth;
+      btn.classList.add('pulse');
     }
 
     document.addEventListener('mouseup', () => {

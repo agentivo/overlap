@@ -180,6 +180,17 @@
       border-color: #0071e3;
     }
 
+    .form-group input.shake {
+      animation: shake 0.5s ease-in-out;
+      border-color: #ef4444;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-4px); }
+      40%, 80% { transform: translateX(4px); }
+    }
+
     .form-group input::placeholder {
       color: var(--text-secondary);
     }
@@ -1590,6 +1601,19 @@
 
     function copyLink() {
       const btn = document.getElementById('copyBtn');
+      const nameInput = document.getElementById('userName');
+      const name = nameInput.value.trim();
+
+      if (!name) {
+        nameInput.focus();
+        nameInput.classList.add('shake');
+        setTimeout(() => nameInput.classList.remove('shake'), 500);
+        return;
+      }
+
+      // Save before copying
+      autoSave();
+
       navigator.clipboard.writeText(window.location.href).then(() => {
         btn.textContent = 'Copied!';
         btn.classList.add('copied');

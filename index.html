@@ -945,6 +945,7 @@
     let eventTimezone = null;
     let lastCell = null;
     let weekOffset = 0;
+    let myCurrentName = null; // Track current user's name to avoid duplicates
 
     // Timezone lookup table (common timezones)
     const TIMEZONES = [
@@ -1456,6 +1457,12 @@
         updateTimezoneDisplay();
       }
 
+      // Remove old name if changed
+      if (myCurrentName && myCurrentName !== name) {
+        delete allParticipants[myCurrentName];
+      }
+      myCurrentName = name;
+
       allParticipants[name] = new Set(myAvailability);
       updateParticipantList();
       updateURL();
@@ -1704,7 +1711,15 @@
     setInterval(updateNowIndicator, 60000); // Update every minute
 
     // Auto-focus name input on load
-    document.getElementById('userName').focus();
+    const nameInput = document.getElementById('userName');
+    nameInput.focus();
+
+    // Update participant name in real-time
+    nameInput.addEventListener('input', () => {
+      if (myAvailability.size > 0) {
+        autoSave();
+      }
+    });
   </script>
 </body>
 </html>

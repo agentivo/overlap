@@ -29,12 +29,21 @@ jobs:
 
       - name: Download persisted data
         continue-on-error: true
+        env:
+          DATA_KEY: ${{ secrets.DATA_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Download from data branch
-          git fetch origin data:data 2>/dev/null || true
-          if git show data:radata.tar.gz > radata.tar.gz 2>/dev/null; then
+          # Download from data branch via API
+          RESPONSE=$(curl -s -H "Authorization: token $GH_TOKEN" \
+            "https://api.github.com/repos/agentivo/overlap/contents/radata.enc?ref=data")
+
+          CONTENT=$(echo "$RESPONSE" | jq -r '.content // empty' | tr -d '\n')
+
+          if [ -n "$CONTENT" ]; then
+            echo "$CONTENT" | base64 -d > radata.enc
+            openssl enc -aes-256-cbc -pbkdf2 -d -in radata.enc -out radata.tar.gz -pass pass:"$DATA_KEY"
             tar -xzf radata.tar.gz
-            rm radata.tar.gz
+            rm radata.tar.gz radata.enc
             echo "Restored data from data branch"
             ls -la radata
           else
@@ -99,6 +108,7 @@ jobs:
           APP_ID: ${{ secrets.APP_ID }}
           APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DATA_KEY: ${{ secrets.DATA_KEY }}
         run: |
           upload_data() {
             if [ ! -d "radata" ]; then
@@ -106,24 +116,32 @@ jobs:
               return
             fi
 
-            # Create tar archive and push to data branch
+            echo "Backing up data..."
+
+            # Create encrypted tar archive
             tar -czf radata.tar.gz radata
+            openssl enc -aes-256-cbc -pbkdf2 -in radata.tar.gz -out radata.enc -pass pass:"$DATA_KEY"
+            rm radata.tar.gz
 
-            git config user.email "actions@github.com"
-            git config user.name "GitHub Actions"
+            # Upload as base64 via GitHub API
+            CONTENT=$(base64 -w 0 radata.enc)
 
-            # Create orphan data branch if needed, or update it
-            git checkout --orphan data-temp 2>/dev/null || git checkout -B data-temp
-            git rm -rf . 2>/dev/null || true
-            mv radata.tar.gz .
-            git add radata.tar.gz
-            git commit -m "Data backup $(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null || true
-            git push -f origin HEAD:data 2>/dev/null && echo "Data backed up to data branch" || echo "Failed to push data"
+            # Check if file exists on data branch
+            EXISTING_SHA=$(curl -s -H "Authorization: token $GH_TOKEN" \
+              "https://api.github.com/repos/agentivo/overlap/contents/radata.enc?ref=data" | jq -r '.sha // empty')
 
-            # Return to main
-            git checkout main 2>/dev/null || git checkout -f main
-            tar -xzf radata.tar.gz 2>/dev/null || true
-            rm -f radata.tar.gz
+            if [ -n "$EXISTING_SHA" ]; then
+              curl -s -X PUT -H "Authorization: token $GH_TOKEN" \
+                "https://api.github.com/repos/agentivo/overlap/contents/radata.enc" \
+                -d "{\"message\":\"backup\",\"content\":\"$CONTENT\",\"sha\":\"$EXISTING_SHA\",\"branch\":\"data\"}" > /dev/null
+            else
+              curl -s -X PUT -H "Authorization: token $GH_TOKEN" \
+                "https://api.github.com/repos/agentivo/overlap/contents/radata.enc" \
+                -d "{\"message\":\"backup\",\"content\":\"$CONTENT\",\"branch\":\"data\"}" > /dev/null
+            fi
+
+            rm -f radata.enc
+            echo "Data backed up"
           }
 
           cleanup() {
@@ -182,7 +200,7 @@ jobs:
           echo "Duration: ${DURATION_HOURS}h | Auto-restart: $AUTO_RESTART"
 
           LAST_UPLOAD=0
-          UPLOAD_INTERVAL=1800  # 30 minutes
+          UPLOAD_INTERVAL=300  # 5 minutes
 
           while true; do
             ELAPSED=$(($(date +%s) - START_TIME))

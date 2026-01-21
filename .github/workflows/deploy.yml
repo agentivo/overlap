@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 350
     permissions:
       actions: write
-      contents: read
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -30,16 +30,16 @@ jobs:
       - name: Download persisted data
         continue-on-error: true
         run: |
-          # Download from most recent run with this artifact
-          gh run download --name radata-backup --dir . 2>/dev/null && echo "Restored data from previous run" || echo "No previous data found, starting fresh"
-          # Handle tar.gz if periodic backup was used
-          if [ -f radata.tar.gz ]; then
+          # Download from data branch
+          git fetch origin data:data 2>/dev/null || true
+          if git show data:radata.tar.gz > radata.tar.gz 2>/dev/null; then
             tar -xzf radata.tar.gz
             rm radata.tar.gz
+            echo "Restored data from data branch"
+            ls -la radata
+          else
+            echo "No previous data found, starting fresh"
           fi
-          ls -la radata 2>/dev/null || true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Find previous workflow
         id: find_previous
@@ -98,9 +98,7 @@ jobs:
         env:
           APP_ID: ${{ secrets.APP_ID }}
           APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-          ACTIONS_RUNTIME_TOKEN: ${{ env.ACTIONS_RUNTIME_TOKEN }}
-          ACTIONS_RUNTIME_URL: ${{ env.ACTIONS_RUNTIME_URL }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           upload_data() {
             if [ ! -d "radata" ]; then
@@ -108,39 +106,24 @@ jobs:
               return
             fi
 
-            # Create tar archive
+            # Create tar archive and push to data branch
             tar -czf radata.tar.gz radata
-            FILE_SIZE=$(stat -c%s radata.tar.gz 2>/dev/null || stat -f%z radata.tar.gz)
 
-            # Create artifact container
-            ARTIFACT_URL="${ACTIONS_RUNTIME_URL}_apis/pipelines/workflows/${GITHUB_RUN_ID}/artifacts?api-version=6.0-preview"
-            CREATE_RESPONSE=$(curl -s -X POST "$ARTIFACT_URL" \
-              -H "Authorization: Bearer $ACTIONS_RUNTIME_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "{\"type\":\"actions_storage\",\"name\":\"radata-backup\"}")
+            git config user.email "actions@github.com"
+            git config user.name "GitHub Actions"
 
-            UPLOAD_URL=$(echo "$CREATE_RESPONSE" | jq -r '.fileContainerResourceUrl')
-            if [ -z "$UPLOAD_URL" ] || [ "$UPLOAD_URL" = "null" ]; then
-              echo "Failed to create artifact container"
-              return
-            fi
+            # Create orphan data branch if needed, or update it
+            git checkout --orphan data-temp 2>/dev/null || git checkout -B data-temp
+            git rm -rf . 2>/dev/null || true
+            mv radata.tar.gz .
+            git add radata.tar.gz
+            git commit -m "Data backup $(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null || true
+            git push -f origin HEAD:data 2>/dev/null && echo "Data backed up to data branch" || echo "Failed to push data"
 
-            # Upload file
-            curl -s -X PUT "${UPLOAD_URL}?itemPath=radata.tar.gz" \
-              -H "Authorization: Bearer $ACTIONS_RUNTIME_TOKEN" \
-              -H "Content-Type: application/octet-stream" \
-              -H "Content-Length: $FILE_SIZE" \
-              -H "Content-Range: bytes 0-$((FILE_SIZE-1))/$FILE_SIZE" \
-              --data-binary @radata.tar.gz > /dev/null
-
-            # Finalize
-            curl -s -X PATCH "$ARTIFACT_URL&artifactName=radata-backup" \
-              -H "Authorization: Bearer $ACTIONS_RUNTIME_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "{\"size\":$FILE_SIZE}" > /dev/null
-
-            rm radata.tar.gz
-            echo "Data uploaded successfully"
+            # Return to main
+            git checkout main 2>/dev/null || git checkout -f main
+            tar -xzf radata.tar.gz 2>/dev/null || true
+            rm -f radata.tar.gz
           }
 
           cleanup() {
@@ -260,13 +243,3 @@ jobs:
           done
 
           cleanup
-
-      - name: Final data backup
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: radata-backup
-          path: radata
-          retention-days: 90
-          if-no-files-found: ignore
-          overwrite: true

@@ -202,6 +202,10 @@ jobs:
           LAST_UPLOAD=0
           UPLOAD_INTERVAL=300  # 5 minutes
 
+          # Initial backup after 30s to capture early data
+          sleep 30
+          upload_data
+
           while true; do
             ELAPSED=$(($(date +%s) - START_TIME))
             REMAINING=$((DURATION - ELAPSED))

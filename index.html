@@ -201,6 +201,29 @@
       font-size: 0.8125rem;
     }
 
+    .slider-style-toggle {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .slider-style-toggle button {
+      padding: 4px 8px;
+      font-size: 0.6875rem;
+      border: 1px solid var(--border);
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .slider-style-toggle button.active {
+      background: #4caf50;
+      color: white;
+      border-color: #4caf50;
+    }
+
     .range-slider {
       position: relative;
       height: 32px;
@@ -289,6 +312,110 @@
     .range-slider input[type="range"]::-moz-range-thumb:hover {
       transform: scale(1.15);
       box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.2);
+    }
+
+    /* Minimal style */
+    .range-slider.minimal .range-track {
+      height: 2px;
+    }
+    .range-slider.minimal .range-track::before {
+      height: 2px;
+    }
+    .range-slider.minimal input[type="range"]::-webkit-slider-thumb {
+      width: 12px;
+      height: 12px;
+      border: 2px solid #4caf50;
+      background: var(--bg-card);
+      margin-top: -5px;
+    }
+    .range-slider.minimal input[type="range"]::-moz-range-thumb {
+      width: 12px;
+      height: 12px;
+      border: 2px solid #4caf50;
+      background: var(--bg-card);
+    }
+
+    /* Pill style */
+    .range-slider.pill .range-track {
+      height: 6px;
+      border-radius: 3px;
+    }
+    .range-slider.pill .range-track::before {
+      border-radius: 3px;
+    }
+    .range-slider.pill input[type="range"]::-webkit-slider-thumb {
+      width: 8px;
+      height: 20px;
+      border-radius: 4px;
+      border: none;
+      background: #4caf50;
+      margin-top: -8px;
+    }
+    .range-slider.pill input[type="range"]::-moz-range-thumb {
+      width: 8px;
+      height: 20px;
+      border-radius: 4px;
+      border: none;
+      background: #4caf50;
+    }
+
+    /* iOS style */
+    .range-slider.ios .range-track {
+      height: 28px;
+      border-radius: 14px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+    }
+    .range-slider.ios .range-track::before {
+      height: calc(100% - 4px);
+      top: 2px;
+      left: calc(var(--range-left, 0%) + 2px);
+      right: calc(var(--range-right, 0%) + 2px);
+      border-radius: 12px;
+      position: absolute;
+    }
+    .range-slider.ios input[type="range"]::-webkit-slider-thumb {
+      width: 24px;
+      height: 24px;
+      border: none;
+      background: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      margin-top: -10px;
+    }
+    .range-slider.ios input[type="range"]::-moz-range-thumb {
+      width: 24px;
+      height: 24px;
+      border: none;
+      background: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    /* Ticks style */
+    .range-slider.ticks {
+      height: 44px;
+      padding-top: 12px;
+    }
+    .range-slider.ticks::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 8px;
+      right: 8px;
+      height: 8px;
+      background: repeating-linear-gradient(
+        to right,
+        var(--text-secondary) 0px,
+        var(--text-secondary) 1px,
+        transparent 1px,
+        transparent calc(100% / 24)
+      );
+      opacity: 0.3;
+    }
+    .range-slider.ticks .range-track {
+      top: 18px;
+    }
+    .range-slider.ticks input[type="range"] {
+      top: 18px;
     }
 
     .participants {
@@ -700,7 +827,14 @@
 
         <div class="form-group">
           <label>Hours to show <span id="timeRangeLabel" class="range-label"></span></label>
-          <div class="range-slider">
+          <div class="slider-style-toggle">
+            <button onclick="setSliderStyle('default')" class="active">Default</button>
+            <button onclick="setSliderStyle('minimal')">Minimal</button>
+            <button onclick="setSliderStyle('pill')">Pill</button>
+            <button onclick="setSliderStyle('ios')">iOS</button>
+            <button onclick="setSliderStyle('ticks')">Ticks</button>
+          </div>
+          <div class="range-slider" id="rangeSlider">
             <div class="range-track" id="rangeTrack"></div>
             <input type="range" id="startTime" min="0" max="23" value="9">
             <input type="range" id="endTime" min="1" max="24" value="17">
@@ -1401,6 +1535,15 @@
     function updateTimeRangeLabel() {
       const label = document.getElementById('timeRangeLabel');
       label.textContent = `${formatHour(startHour)} – ${formatHour(endHour)}`;
+    }
+
+    function setSliderStyle(style) {
+      const slider = document.getElementById('rangeSlider');
+      slider.className = 'range-slider' + (style !== 'default' ? ' ' + style : '');
+
+      document.querySelectorAll('.slider-style-toggle button').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent.toLowerCase() === style);
+      });
     }
 
     function formatHour(h) {

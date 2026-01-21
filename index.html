@@ -358,6 +358,27 @@
       filter: brightness(1.1);
     }
 
+    .now-indicator {
+      position: absolute;
+      left: 60px;
+      right: 0;
+      height: 2px;
+      background: #ef4444;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .now-indicator::before {
+      content: '';
+      position: absolute;
+      left: -4px;
+      top: -3px;
+      width: 8px;
+      height: 8px;
+      background: #ef4444;
+      border-radius: 50%;
+    }
+
     .date-header {
       text-align: center;
     }
@@ -551,6 +572,7 @@
         <div class="grid-container">
           <div class="grid" id="grid"></div>
           <div class="tooltip" id="tooltip"></div>
+          <div class="now-indicator" id="nowIndicator" style="display: none;"></div>
         </div>
 
         <div class="instructions">
@@ -1134,10 +1156,12 @@
       startSelect.onchange = () => {
         startHour = parseInt(startSelect.value);
         renderGrid();
+        updateNowIndicator();
       };
       endSelect.onchange = () => {
         endHour = parseInt(endSelect.value);
         renderGrid();
+        updateNowIndicator();
       };
     }
 
@@ -1501,6 +1525,45 @@
       });
     }
 
+    // Current time indicator
+    function updateNowIndicator() {
+      const indicator = document.getElementById('nowIndicator');
+      const grid = document.getElementById('grid');
+      const now = new Date();
+
+      // Check if today is in the visible days (day 0)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const firstDay = new Date(days[0]);
+      firstDay.setHours(0, 0, 0, 0);
+
+      if (today.getTime() !== firstDay.getTime()) {
+        indicator.style.display = 'none';
+        return;
+      }
+
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+
+      // Check if current time is in visible range
+      if (currentHour < startHour || currentHour >= endHour) {
+        indicator.style.display = 'none';
+        return;
+      }
+
+      // Calculate position
+      const headerHeight = grid.querySelector('.grid-cell.header')?.offsetHeight || 0;
+      const cellHeight = 24; // min-height of cells
+      const gap = 1; // grid gap
+
+      const slotsFromStart = (currentHour - startHour) * 4 + Math.floor(currentMinute / 15);
+      const minuteOffset = (currentMinute % 15) / 15 * (cellHeight + gap);
+      const topPosition = headerHeight + gap + slotsFromStart * (cellHeight + gap) + minuteOffset;
+
+      indicator.style.display = 'block';
+      indicator.style.top = topPosition + 'px';
+    }
+
     // Auto-focus name input when typing
     document.addEventListener('keydown', (e) => {
       const nameInput = document.getElementById('userName');
@@ -1519,6 +1582,8 @@
     renderGrid();
     updateParticipantList();
     updateTimezoneDisplay();
+    updateNowIndicator();
+    setInterval(updateNowIndicator, 60000); // Update every minute
 
     // Auto-focus name input on load
     document.getElementById('userName').focus();

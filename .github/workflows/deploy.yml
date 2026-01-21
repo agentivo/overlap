@@ -34,7 +34,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Find and cancel previous workflow
+      - name: Find previous workflow
         id: find_previous
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -46,14 +46,10 @@ jobs:
             | jq -r ".workflow_runs[] | select(.id < ${{ github.run_id }}) | .id" | head -1)
 
           if [ -n "$PREVIOUS_RUN_ID" ] && [ "$PREVIOUS_RUN_ID" != "null" ]; then
-            echo "Found previous run: $PREVIOUS_RUN_ID - cancelling..."
-            curl -s -X POST \
-              -H "Authorization: token $GH_TOKEN" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/${{ github.repository }}/actions/runs/$PREVIOUS_RUN_ID/cancel"
-            echo "Waiting 45s for previous instance to backup and shutdown..."
-            sleep 45
+            echo "previous_run_id=$PREVIOUS_RUN_ID" >> $GITHUB_OUTPUT
+            echo "Found previous run: $PREVIOUS_RUN_ID"
           else
+            echo "previous_run_id=" >> $GITHUB_OUTPUT
             echo "No previous run found"
           fi
 
@@ -63,7 +59,7 @@ jobs:
           DATA_KEY: ${{ secrets.DATA_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Download from data branch via API (after old workflow pushed its data)
+          # Download current data (old workflow still running)
           RESPONSE=$(curl -s -H "Authorization: token $GH_TOKEN" \
             "https://api.github.com/repos/agentivo/overlap/contents/radata.enc?ref=data")
 
@@ -98,6 +94,18 @@ jobs:
           ./cloudflared tunnel --url http://localhost:3000 --no-autoupdate run --token "${{ secrets.TUNNEL_TOKEN }}" &
           sleep 5
           echo "Tunnel started"
+
+      - name: Cancel previous workflow
+        if: steps.find_previous.outputs.previous_run_id != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "New server ready - cancelling previous workflow..."
+          curl -s -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ steps.find_previous.outputs.previous_run_id }}/cancel"
+          echo "Graceful handoff complete"
 
       - name: Monitor
         env:

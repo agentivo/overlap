@@ -1209,6 +1209,8 @@
       const tooltip = document.getElementById('tooltip');
       const bestTimesEl = document.getElementById('bestTimes');
 
+      console.log('updateGridDisplay:', { mode, myAvailabilitySize: myAvailability.size, allParticipants: Object.keys(allParticipants), cellCount: cells.length });
+
       if (mode === 'edit') {
         cells.forEach(cell => {
           const cellId = cell.dataset.cellId;
@@ -1220,6 +1222,11 @@
         // View mode - show aggregate
         const participantCount = Object.keys(allParticipants).length;
         const perfectMatches = [];
+
+        // Debug: log first cell and check if any slots match
+        const firstCellId = cells[0]?.dataset.cellId;
+        const allSlots = Object.values(allParticipants).flatMap(s => [...s]);
+        console.log('View mode:', { participantCount, firstCellId, sampleSlots: allSlots.slice(0, 5) });
 
         cells.forEach(cell => {
           const cellId = cell.dataset.cellId;

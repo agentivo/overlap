@@ -414,6 +414,16 @@
     [data-theme="light"] .grid-cell.available-8 { background: #388e3c; }
     [data-theme="light"] .grid-cell.available-9 { background: #2e7d32; }
 
+    .grid-cell.full-overlap {
+      background: #22c55e !important;
+      box-shadow: inset 0 0 0 2px #16a34a;
+    }
+
+    [data-theme="light"] .grid-cell.full-overlap {
+      background: #22c55e !important;
+      box-shadow: inset 0 0 0 2px #16a34a;
+    }
+
     .grid-cell:not(.header):not(.time-label):hover {
       filter: brightness(1.1);
     }
@@ -1510,6 +1520,9 @@
           if (count > 0 && participantCount > 0) {
             const level = Math.ceil((count / participantCount) * 9);
             cell.classList.add(`available-${level}`);
+            if (count === participantCount && participantCount > 1) {
+              cell.classList.add('full-overlap');
+            }
           }
 
           // Add hover for tooltip

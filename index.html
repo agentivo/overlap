@@ -619,8 +619,8 @@
       <div class="main">
         <div class="grid-header">
           <div class="mode-toggle">
-            <button class="active" onclick="setMode('edit')">Edit</button>
-            <button onclick="setMode('view')">View Group</button>
+            <button class="active" id="editBtn" onclick="setMode('edit')">Me</button>
+            <button onclick="setMode('view')">Group</button>
           </div>
           <div class="week-nav">
             <button class="nav-btn" id="prevWeek" onclick="prevWeek()" disabled>◀</button>
@@ -1717,7 +1717,13 @@
     // Update participant name in real-time
     nameInput.addEventListener('input', () => {
       autoSave();
+      updateEditButtonLabel();
     });
+
+    function updateEditButtonLabel() {
+      const name = document.getElementById('userName').value.trim();
+      document.getElementById('editBtn').textContent = name || 'Me';
+    }
   </script>
 </body>
 </html>

@@ -1174,7 +1174,13 @@
       }
       myCurrentName = name;
 
-      allParticipants[name] = new Set(myAvailability);
+      // If this participant already exists, load their selections
+      if (allParticipants[name] && allParticipants[name].size > 0 && myAvailability.size === 0) {
+        myAvailability = new Set(allParticipants[name]);
+        updateGridDisplay();
+      } else {
+        allParticipants[name] = new Set(myAvailability);
+      }
       updateParticipantList();
 
       // Debounce saves to Gun

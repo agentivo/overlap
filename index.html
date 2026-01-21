@@ -942,6 +942,121 @@
       return slots;
     }
 
+    // Binary encoding with base64url
+    function encodeBinary(tz, participants) {
+      const bytes = [];
+
+      // Timezone (1 byte index, or 255 + length + string)
+      const tzIdx = getTimezoneIndex(tz);
+      if (tzIdx !== null) {
+        bytes.push(tzIdx);
+      } else {
+        bytes.push(255);
+        const tzBytes = new TextEncoder().encode(tz);
+        bytes.push(tzBytes.length);
+        bytes.push(...tzBytes);
+      }
+
+      // Participants
+      const entries = Object.entries(participants);
+      bytes.push(entries.length);
+
+      entries.forEach(([name, cellIds]) => {
+        const nameBytes = new TextEncoder().encode(name);
+        bytes.push(nameBytes.length);
+        bytes.push(...nameBytes);
+
+        // Convert to slots and get ranges
+        const slots = Array.from(cellIds).map(cellIdToSlot).sort((a, b) => a - b);
+        const ranges = [];
+        if (slots.length > 0) {
+          let start = slots[0], len = 1;
+          for (let i = 1; i < slots.length; i++) {
+            if (slots[i] === slots[i-1] + 1) {
+              len++;
+            } else {
+              ranges.push([start, len]);
+              start = slots[i];
+              len = 1;
+            }
+          }
+          ranges.push([start, len]);
+        }
+
+        // Number of ranges (2 bytes)
+        bytes.push(ranges.length & 0xFF);
+        bytes.push((ranges.length >> 8) & 0xFF);
+
+        // Each range: start (2 bytes) + length (1 byte)
+        ranges.forEach(([start, len]) => {
+          bytes.push(start & 0xFF);
+          bytes.push((start >> 8) & 0xFF);
+          bytes.push(len);
+        });
+      });
+
+      return base64UrlEncode(new Uint8Array(bytes));
+    }
+
+    function decodeBinary(str) {
+      const bytes = base64UrlDecode(str);
+      let pos = 0;
+
+      // Timezone
+      let tz;
+      const tzIdx = bytes[pos++];
+      if (tzIdx === 255) {
+        const tzLen = bytes[pos++];
+        tz = new TextDecoder().decode(bytes.slice(pos, pos + tzLen));
+        pos += tzLen;
+      } else {
+        tz = getTimezoneByIndex(tzIdx) || getLocalTimezone();
+      }
+
+      // Participants
+      const numParticipants = bytes[pos++];
+      const participants = {};
+
+      for (let i = 0; i < numParticipants; i++) {
+        const nameLen = bytes[pos++];
+        const name = new TextDecoder().decode(bytes.slice(pos, pos + nameLen));
+        pos += nameLen;
+
+        const numRanges = bytes[pos] | (bytes[pos + 1] << 8);
+        pos += 2;
+
+        const cellIds = new Set();
+        for (let r = 0; r < numRanges; r++) {
+          const start = bytes[pos] | (bytes[pos + 1] << 8);
+          pos += 2;
+          const len = bytes[pos++];
+          for (let s = 0; s < len; s++) {
+            cellIds.add(slotToCellId(start + s));
+          }
+        }
+
+        participants[name] = cellIds;
+      }
+
+      return { tz, participants };
+    }
+
+    function base64UrlEncode(uint8Array) {
+      let binary = '';
+      uint8Array.forEach(b => binary += String.fromCharCode(b));
+      return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    function base64UrlDecode(str) {
+      str = str.replace(/-/g, '+').replace(/_/g, '/');
+      while (str.length % 4) str += '=';
+      const binary = atob(str);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes;
+    }
+
+    // Legacy compact format (for backward compatibility)
     function encodeCompact(tz, participants) {
       const tzIdx = getTimezoneIndex(tz);
       const tzPart = tzIdx !== null ? tzIdx : `~${tz}`;
@@ -1319,45 +1434,55 @@
 
     function updateURL() {
       const tz = eventTimezone || getLocalTimezone();
-      const compact = encodeCompact(tz, allParticipants);
-      history.replaceState(null, '', '?d=' + compact);
+      const binary = encodeBinary(tz, allParticipants);
+      history.replaceState(null, '', '?v=2&d=' + binary);
     }
 
     function loadFromURL() {
       const params = new URLSearchParams(window.location.search);
+      const version = params.get('v');
       const encoded = params.get('d');
-      if (encoded) {
-        try {
-          // Try compact format first (starts with number or ~)
-          if (/^(\d+|~)/.test(encoded)) {
-            const { tz, participants } = decodeCompact(encoded);
-            eventTimezone = tz;
-            Object.assign(allParticipants, participants);
-            return;
-          }
 
-          // Try LZ decompression
-          let jsonStr = LZ.decompressFromEncodedURIComponent(encoded);
+      if (!encoded) return;
 
-          // Fallback to old base64 format
-          if (!jsonStr || jsonStr.charAt(0) !== '{') {
-            jsonStr = decodeURIComponent(atob(encoded));
-          }
-
-          const data = JSON.parse(jsonStr);
-          if (data.tz) {
-            eventTimezone = data.tz;
-            Object.entries(data.p || {}).forEach(([name, slots]) => {
-              allParticipants[name] = new Set(slots);
-            });
-          } else {
-            Object.entries(data).forEach(([name, slots]) => {
-              allParticipants[name] = new Set(slots);
-            });
-          }
-        } catch (e) {
-          console.error('Failed to load data from URL');
+      try {
+        // Version 2: binary format
+        if (version === '2') {
+          const { tz, participants } = decodeBinary(encoded);
+          eventTimezone = tz;
+          Object.assign(allParticipants, participants);
+          return;
         }
+
+        // Legacy: compact format (starts with number or ~)
+        if (/^(\d+|~)/.test(encoded)) {
+          const { tz, participants } = decodeCompact(encoded);
+          eventTimezone = tz;
+          Object.assign(allParticipants, participants);
+          return;
+        }
+
+        // Legacy: LZ decompression
+        let jsonStr = LZ.decompressFromEncodedURIComponent(encoded);
+
+        // Legacy: old base64 format
+        if (!jsonStr || jsonStr.charAt(0) !== '{') {
+          jsonStr = decodeURIComponent(atob(encoded));
+        }
+
+        const data = JSON.parse(jsonStr);
+        if (data.tz) {
+          eventTimezone = data.tz;
+          Object.entries(data.p || {}).forEach(([name, slots]) => {
+            allParticipants[name] = new Set(slots);
+          });
+        } else {
+          Object.entries(data).forEach(([name, slots]) => {
+            allParticipants[name] = new Set(slots);
+          });
+        }
+      } catch (e) {
+        console.error('Failed to load data from URL');
       }
     }
 

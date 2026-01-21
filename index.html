@@ -1386,8 +1386,10 @@
         if (name === myCurrentName) return;
 
         // Parse slots
+        console.log('Gun data for', name, ':', data);
         const slots = data.slots ? data.slots.split(',').filter(Boolean) : [];
         allParticipants[name] = new Set(slots);
+        console.log('Parsed slots:', slots);
 
         updateParticipantList();
         updateGridDisplay();

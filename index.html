@@ -465,6 +465,7 @@
       min-height: 24px;
       transition: background-color 0.1s;
       cursor: pointer;
+      position: relative;
     }
 
     .grid-cell.header {
@@ -502,6 +503,32 @@
 
     [data-theme="dark"] .grid-cell.available {
       background: #43a047;
+    }
+
+    /* Others' selections shown faintly in edit mode */
+    .grid-cell.others-selected {
+      background: rgba(76, 175, 80, 0.15);
+    }
+    .grid-cell.available.others-selected {
+      background: #4caf50;
+    }
+    [data-theme="dark"] .grid-cell.others-selected {
+      background: rgba(76, 175, 80, 0.2);
+    }
+    [data-theme="dark"] .grid-cell.available.others-selected {
+      background: #43a047;
+    }
+    .others-indicator {
+      position: absolute;
+      bottom: 2px;
+      right: 3px;
+      font-size: 10px;
+      opacity: 0.5;
+      color: #4caf50;
+    }
+    .grid-cell.available .others-indicator {
+      color: white;
+      opacity: 0.8;
     }
 
     .grid-cell.available-1 { background: #1e3d1e; }
@@ -1209,24 +1236,33 @@
       const tooltip = document.getElementById('tooltip');
       const bestTimesEl = document.getElementById('bestTimes');
 
-      console.log('updateGridDisplay:', { mode, myAvailabilitySize: myAvailability.size, allParticipants: Object.keys(allParticipants), cellCount: cells.length });
-
       if (mode === 'edit') {
+        const otherParticipants = Object.entries(allParticipants).filter(([name]) => name !== myCurrentName);
+        const otherCount = otherParticipants.length;
+
         cells.forEach(cell => {
           const cellId = cell.dataset.cellId;
-          cell.className = 'grid-cell' + (myAvailability.has(cellId) ? ' available' : '');
+          const mine = myAvailability.has(cellId);
+          const othersWithSlot = otherParticipants.filter(([, slots]) => slots.has(cellId)).length;
+
+          cell.className = 'grid-cell';
+          if (mine) cell.classList.add('available');
+          if (othersWithSlot > 0) cell.classList.add('others-selected');
           cell.innerHTML = '';
+
+          // Show faint count of others
+          if (othersWithSlot > 0 && otherCount > 0) {
+            const indicator = document.createElement('div');
+            indicator.className = 'others-indicator';
+            indicator.textContent = othersWithSlot;
+            cell.appendChild(indicator);
+          }
         });
         bestTimesEl.classList.remove('visible');
       } else {
         // View mode - show aggregate
         const participantCount = Object.keys(allParticipants).length;
         const perfectMatches = [];
-
-        // Debug: log first cell and check if any slots match
-        const firstCellId = cells[0]?.dataset.cellId;
-        const allSlots = Object.values(allParticipants).flatMap(s => [...s]);
-        console.log('View mode:', { participantCount, firstCellId, sampleSlots: allSlots.slice(0, 5) });
 
         cells.forEach(cell => {
           const cellId = cell.dataset.cellId;

@@ -394,15 +394,15 @@
       background: #43a047;
     }
 
-    .grid-cell.available-1 { background: #1b3d1b; }
-    .grid-cell.available-2 { background: #234d23; }
-    .grid-cell.available-3 { background: #2b5d2b; }
-    .grid-cell.available-4 { background: #337033; }
-    .grid-cell.available-5 { background: #3b833b; }
-    .grid-cell.available-6 { background: #439643; }
-    .grid-cell.available-7 { background: #4caf50; }
-    .grid-cell.available-8 { background: #5cb85c; }
-    .grid-cell.available-9 { background: #66bb6a; }
+    .grid-cell.available-1 { background: #1a2e1a; }
+    .grid-cell.available-2 { background: #1e3a1e; }
+    .grid-cell.available-3 { background: #244824; }
+    .grid-cell.available-4 { background: #2a562a; }
+    .grid-cell.available-5 { background: #316531; }
+    .grid-cell.available-6 { background: #397439; }
+    .grid-cell.available-7 { background: #418441; }
+    .grid-cell.available-8 { background: #4a954a; }
+    .grid-cell.available-9 { background: #52a652; }
 
     [data-theme="light"] .grid-cell.available-1 { background: #e8f5e9; }
     [data-theme="light"] .grid-cell.available-2 { background: #c8e6c9; }
@@ -413,6 +413,38 @@
     [data-theme="light"] .grid-cell.available-7 { background: #43a047; }
     [data-theme="light"] .grid-cell.available-8 { background: #388e3c; }
     [data-theme="light"] .grid-cell.available-9 { background: #2e7d32; }
+
+    .grid-cell.perfect-match {
+      box-shadow: inset 0 0 0 2px #ffd700;
+    }
+
+    .grid-cell .cell-count {
+      font-size: 0.625rem;
+      color: rgba(255,255,255,0.9);
+      text-align: center;
+      line-height: 24px;
+      font-weight: 600;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    }
+
+    .best-times {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      background: rgba(76, 175, 80, 0.15);
+      border: 1px solid rgba(76, 175, 80, 0.3);
+      border-radius: 8px;
+      font-size: 0.8125rem;
+      color: var(--text);
+      display: none;
+    }
+
+    .best-times.visible {
+      display: block;
+    }
+
+    .best-times strong {
+      color: #4caf50;
+    }
 
     .grid-cell:not(.header):not(.time-label):hover {
       filter: brightness(1.1);
@@ -628,9 +660,9 @@
             <button class="nav-btn" id="nextWeek" onclick="nextWeek()">▶</button>
           </div>
           <div class="legend">
-            <span>None</span>
+            <span>0</span>
             <div class="legend-bar"></div>
-            <span>All</span>
+            <span>All ✓</span>
           </div>
         </div>
 
@@ -639,6 +671,8 @@
           <div class="tooltip" id="tooltip"></div>
           <div class="now-indicator" id="nowIndicator" style="display: none;"></div>
         </div>
+
+        <div class="best-times" id="bestTimes"></div>
 
         <div class="instructions">
           <span id="timezoneDisplay"></span>
@@ -1490,15 +1524,20 @@
     function updateGridDisplay() {
       const cells = document.querySelectorAll('.grid-cell[data-cell-id]');
       const tooltip = document.getElementById('tooltip');
+      const bestTimesEl = document.getElementById('bestTimes');
 
       if (mode === 'edit') {
         cells.forEach(cell => {
           const cellId = cell.dataset.cellId;
           cell.className = 'grid-cell' + (myAvailability.has(cellId) ? ' available' : '');
+          cell.innerHTML = '';
         });
+        bestTimesEl.classList.remove('visible');
       } else {
         // View mode - show aggregate
         const participantCount = Object.keys(allParticipants).length;
+        const perfectMatches = [];
+
         cells.forEach(cell => {
           const cellId = cell.dataset.cellId;
           let count = 0;
@@ -1507,9 +1546,23 @@
           });
 
           cell.className = 'grid-cell';
+          cell.innerHTML = '';
+
           if (count > 0 && participantCount > 0) {
             const level = Math.ceil((count / participantCount) * 9);
             cell.classList.add(`available-${level}`);
+
+            // Show count
+            const countEl = document.createElement('div');
+            countEl.className = 'cell-count';
+            countEl.textContent = `${count}/${participantCount}`;
+            cell.appendChild(countEl);
+
+            // Highlight perfect match
+            if (count === participantCount) {
+              cell.classList.add('perfect-match');
+              perfectMatches.push(cellId);
+            }
           }
 
           // Add hover for tooltip
@@ -1532,7 +1585,57 @@
             tooltip.classList.remove('visible');
           };
         });
+
+        // Show best times summary
+        if (participantCount > 1 && perfectMatches.length > 0) {
+          const summary = formatBestTimes(perfectMatches);
+          bestTimesEl.innerHTML = `<strong>Everyone's free:</strong> ${summary}`;
+          bestTimesEl.classList.add('visible');
+        } else {
+          bestTimesEl.classList.remove('visible');
+        }
       }
+    }
+
+    function formatBestTimes(cellIds) {
+      // Group consecutive slots into ranges
+      const slots = cellIds.map(id => {
+        const parts = id.split('-');
+        const dateStr = parts.slice(0, 3).join('-');
+        const hour = parseInt(parts[3]);
+        const quarter = parseInt(parts[4]);
+        return { dateStr, hour, quarter, minutes: hour * 60 + quarter * 15 };
+      }).sort((a, b) => a.dateStr.localeCompare(b.dateStr) || a.minutes - b.minutes);
+
+      const ranges = [];
+      let currentRange = null;
+
+      slots.forEach(slot => {
+        if (!currentRange || currentRange.dateStr !== slot.dateStr || slot.minutes !== currentRange.endMinutes + 15) {
+          if (currentRange) ranges.push(currentRange);
+          currentRange = { dateStr: slot.dateStr, startMinutes: slot.minutes, endMinutes: slot.minutes };
+        } else {
+          currentRange.endMinutes = slot.minutes;
+        }
+      });
+      if (currentRange) ranges.push(currentRange);
+
+      // Format ranges (limit to 3)
+      return ranges.slice(0, 3).map(r => {
+        const date = new Date(r.dateStr);
+        const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+        const startTime = formatTime(r.startMinutes);
+        const endTime = formatTime(r.endMinutes + 15);
+        return `${dayName} ${startTime}–${endTime}`;
+      }).join(', ') + (ranges.length > 3 ? ` +${ranges.length - 3} more` : '');
+    }
+
+    function formatTime(minutes) {
+      const h = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      const period = h >= 12 ? 'pm' : 'am';
+      const hour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      return m === 0 ? `${hour}${period}` : `${hour}:${m.toString().padStart(2, '0')}${period}`;
     }
 
     function setMode(newMode) {

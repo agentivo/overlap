@@ -1408,15 +1408,6 @@
     function toggleCell(cellId) {
       if (!cellId) return;
 
-      // Require name before selecting
-      const nameInput = document.getElementById('userName');
-      const name = nameInput.value.trim();
-      if (!name) {
-        nameInput.focus();
-        isMouseDown = false;
-        return;
-      }
-
       if (isAdding) {
         myAvailability.add(cellId);
       } else {
@@ -1671,7 +1662,15 @@
     setInterval(updateNowIndicator, 60000); // Update every minute
 
     // Auto-focus name input on load
-    document.getElementById('userName').focus();
+    const nameInput = document.getElementById('userName');
+    nameInput.focus();
+
+    // Auto-save when name is entered and there are selections
+    nameInput.addEventListener('input', () => {
+      if (nameInput.value.trim() && myAvailability.size > 0) {
+        autoSave();
+      }
+    });
   </script>
 </body>
 </html>

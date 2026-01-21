@@ -728,6 +728,63 @@
         font-size: 0.875rem;
       }
     }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal {
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 320px;
+      width: 90%;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+    .modal-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .modal-body {
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+    .modal-body strong {
+      color: var(--text);
+    }
+    .modal-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .modal-btn {
+      padding: 12px 16px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      background: #4caf50;
+      color: white;
+      font-weight: 500;
+    }
+    .modal-btn:hover {
+      background: #43a047;
+    }
+    .modal-btn.secondary {
+      background: var(--bg-cell);
+      color: var(--text);
+    }
+    .modal-btn.secondary:hover {
+      background: var(--border);
+    }
   </style>
 </head>
 <body>
@@ -886,6 +943,8 @@
     let lastCell = null;
     let weekOffset = 0;
     let myCurrentName = null;
+    let confirmedAsMe = new Set(); // Names user confirmed as theirs
+    let pendingNameCheck = null; // Name waiting for confirmation
     let saveTimeout = null;
 
     // Timezone
@@ -1187,6 +1246,17 @@
       const name = document.getElementById('userName').value.trim();
       if (!name) return;
 
+      // Check for name collision - someone else might have this name
+      if (allParticipants[name] && allParticipants[name].size > 0 &&
+          name !== myCurrentName && !confirmedAsMe.has(name)) {
+        showNameModal(name);
+        return;
+      }
+
+      proceedWithSave(name);
+    }
+
+    function proceedWithSave(name) {
       // Set timezone on first save
       if (!eventTimezone) {
         eventTimezone = getLocalTimezone();
@@ -1201,7 +1271,7 @@
       }
       myCurrentName = name;
 
-      // If this participant already exists, load their selections
+      // If this participant already exists and confirmed as me, load their selections
       if (allParticipants[name] && allParticipants[name].size > 0 && myAvailability.size === 0) {
         myAvailability = new Set(allParticipants[name]);
         updateGridDisplay();
@@ -1220,6 +1290,35 @@
         });
       }, 300);
     }
+
+    function showNameModal(name) {
+      pendingNameCheck = name;
+      document.getElementById('modalName').textContent = name;
+      document.getElementById('nameModal').style.display = 'flex';
+    }
+
+    function hideNameModal() {
+      document.getElementById('nameModal').style.display = 'none';
+      pendingNameCheck = null;
+    }
+
+    document.getElementById('modalYes').addEventListener('click', () => {
+      if (pendingNameCheck) {
+        confirmedAsMe.add(pendingNameCheck);
+        proceedWithSave(pendingNameCheck);
+      }
+      hideNameModal();
+    });
+
+    document.getElementById('modalNo').addEventListener('click', () => {
+      hideNameModal();
+      const input = document.getElementById('userName');
+      const currentName = input.value.trim();
+      // Suggest adding last initial
+      input.value = currentName + ' ';
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    });
 
     document.addEventListener('mouseup', () => {
       isMouseDown = false;
@@ -1534,5 +1633,19 @@
       document.getElementById('editBtn').textContent = name || 'Me';
     }
   </script>
+
+  <!-- Name collision modal -->
+  <div id="nameModal" class="modal-overlay" style="display: none;">
+    <div class="modal">
+      <div class="modal-title">Is this you?</div>
+      <div class="modal-body">
+        <strong id="modalName"></strong> has already added their availability.
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn" id="modalYes">Yes, that's me</button>
+        <button class="modal-btn secondary" id="modalNo">No, I'm someone else</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

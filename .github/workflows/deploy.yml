@@ -53,13 +53,40 @@ jobs:
             echo "No previous run found"
           fi
 
+      - name: Signal old server to save
+        if: steps.find_previous.outputs.previous_run_id != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create a save signal file to trigger immediate backup from old workflow
+          echo "Signaling old workflow to save data..."
+          SIGNAL_CONTENT=$(echo -n "${{ github.run_id }}" | base64)
+
+          # Check if signal file exists
+          EXISTING=$(curl -s -H "Authorization: token $GH_TOKEN" \
+            "https://api.github.com/repos/agentivo/overlap/contents/.save-signal?ref=data" | jq -r '.sha // empty')
+
+          if [ -n "$EXISTING" ]; then
+            curl -s -X PUT -H "Authorization: token $GH_TOKEN" \
+              "https://api.github.com/repos/agentivo/overlap/contents/.save-signal" \
+              -d "{\"message\":\"save signal\",\"content\":\"$SIGNAL_CONTENT\",\"sha\":\"$EXISTING\",\"branch\":\"data\"}" > /dev/null
+          else
+            curl -s -X PUT -H "Authorization: token $GH_TOKEN" \
+              "https://api.github.com/repos/agentivo/overlap/contents/.save-signal" \
+              -d "{\"message\":\"save signal\",\"content\":\"$SIGNAL_CONTENT\",\"branch\":\"data\"}" > /dev/null
+          fi
+
+          # Wait for old workflow to save (it checks every 30s, give it 45s)
+          echo "Waiting for old workflow to save..."
+          sleep 45
+
       - name: Download persisted data
         continue-on-error: true
         env:
           DATA_KEY: ${{ secrets.DATA_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Download current data (old workflow still running)
+          # Download current data (old workflow should have just saved)
           RESPONSE=$(curl -s -H "Authorization: token $GH_TOKEN" \
             "https://api.github.com/repos/agentivo/overlap/contents/radata.enc?ref=data")
 
@@ -229,6 +256,22 @@ jobs:
               echo "Periodic backup..."
               upload_data
               LAST_UPLOAD=$ELAPSED
+            fi
+
+            # Check for save signal from new deployment
+            SIGNAL=$(curl -s -H "Authorization: token $GH_TOKEN" \
+              "https://api.github.com/repos/agentivo/overlap/contents/.save-signal?ref=data" | jq -r '.content // empty')
+            if [ -n "$SIGNAL" ]; then
+              echo "Save signal received, backing up data..."
+              upload_data
+              LAST_UPLOAD=$ELAPSED
+              # Delete signal file
+              SIGNAL_SHA=$(curl -s -H "Authorization: token $GH_TOKEN" \
+                "https://api.github.com/repos/agentivo/overlap/contents/.save-signal?ref=data" | jq -r '.sha')
+              curl -s -X DELETE -H "Authorization: token $GH_TOKEN" \
+                "https://api.github.com/repos/agentivo/overlap/contents/.save-signal" \
+                -d "{\"message\":\"clear signal\",\"sha\":\"$SIGNAL_SHA\",\"branch\":\"data\"}" > /dev/null
+              echo "Signal cleared"
             fi
 
             printf "[%s] Overlap running | %dm elapsed | %dm remaining\n" \

@@ -785,6 +785,40 @@
     .modal-btn.secondary:hover {
       background: var(--border);
     }
+
+    /* Recent events */
+    .recent-events {
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .recent-event {
+      display: block;
+      padding: 0.625rem 0.75rem;
+      margin-bottom: 0.5rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      text-decoration: none;
+      color: var(--text);
+      font-size: 0.875rem;
+      transition: background 0.2s;
+    }
+
+    .recent-event:hover {
+      background: var(--border);
+    }
+
+    .recent-event-title {
+      font-weight: 500;
+      margin-bottom: 0.25rem;
+    }
+
+    .recent-event-meta {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
   </style>
 </head>
 <body>
@@ -838,6 +872,11 @@
           <div id="participantList">
             <p style="font-size: 0.8125rem; color: var(--text-secondary);">No one yet</p>
           </div>
+        </div>
+
+        <div class="recent-events" id="recentEventsSection" style="display: none;">
+          <h2>Recent Events</h2>
+          <div id="recentEventsList"></div>
         </div>
       </div>
 
@@ -960,6 +999,57 @@
     let confirmedAsMe = new Set(); // Names user confirmed as theirs
     let pendingNameCheck = null; // Name waiting for confirmation
     let saveTimeout = null;
+
+    // Recent events storage
+    const RECENT_EVENTS_KEY = 'overlap-recent-events';
+    const MAX_RECENT_EVENTS = 5;
+
+    function getRecentEvents() {
+      try {
+        return JSON.parse(localStorage.getItem(RECENT_EVENTS_KEY)) || [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveToRecentEvents(id, title, name) {
+      const events = getRecentEvents().filter(e => e.id !== id);
+      events.unshift({ id, title: title || 'Untitled event', name, updated: Date.now() });
+      localStorage.setItem(RECENT_EVENTS_KEY, JSON.stringify(events.slice(0, MAX_RECENT_EVENTS)));
+      loadRecentEvents();
+    }
+
+    function loadRecentEvents() {
+      const section = document.getElementById('recentEventsSection');
+      const list = document.getElementById('recentEventsList');
+      const events = getRecentEvents().filter(e => e.id !== eventId);
+
+      if (events.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+
+      section.style.display = 'block';
+      list.innerHTML = '';
+
+      events.forEach(event => {
+        const link = document.createElement('a');
+        link.className = 'recent-event';
+        link.href = `?event=${event.id}`;
+
+        const title = document.createElement('div');
+        title.className = 'recent-event-title';
+        title.textContent = event.title;
+        link.appendChild(title);
+
+        const meta = document.createElement('div');
+        meta.className = 'recent-event-meta';
+        meta.textContent = `as ${event.name}`;
+        link.appendChild(meta);
+
+        list.appendChild(link);
+      });
+    }
 
     // Timezone
     function getLocalTimezone() {
@@ -1302,6 +1392,12 @@
           tz: getLocalTimezone(),
           updated: Date.now()
         });
+
+        // Save to recent events only if there's actual availability data
+        if (myAvailability.size > 0) {
+          const title = document.getElementById('eventTitle').value.trim();
+          saveToRecentEvents(eventId, title, name);
+        }
       }, 300);
     }
 
@@ -1561,6 +1657,11 @@
           } else {
             document.title = 'Overlap - Find a time that works for everyone';
           }
+
+          // Update recent events if we have saved data
+          if (myCurrentName && myAvailability.size > 0) {
+            saveToRecentEvents(eventId, title, myCurrentName);
+          }
         }, 300);
       });
     }
@@ -1630,6 +1731,7 @@
     updateTimezoneDisplay();
     updateNowIndicator();
     updateWeekNav();
+    loadRecentEvents();
     setInterval(updateNowIndicator, 60000);
 
     // Auto-focus name input on load

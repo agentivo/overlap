@@ -1877,11 +1877,14 @@
       eventRef.get('participants').map().on((data, name) => {
         if (!name) return;
 
-        // Handle deleted participants
+        // Handle deleted participants - only after data is fully loaded
+        // During reconnect, Gun may send null before real data arrives
         if (!data || data === null) {
-          delete allParticipants[name];
-          updateParticipantList();
-          updateGridDisplay();
+          if (gunDataLoaded && allParticipants[name]) {
+            delete allParticipants[name];
+            updateParticipantList();
+            updateGridDisplay();
+          }
           return;
         }
 

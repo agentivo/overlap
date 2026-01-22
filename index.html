@@ -1832,7 +1832,7 @@
 
     function updateParticipantList() {
       const list = document.getElementById('participantList');
-      const names = Object.keys(allParticipants);
+      const names = Object.keys(allParticipants).sort((a, b) => a.localeCompare(b));
 
       if (names.length === 0) {
         list.innerHTML = '<p style="font-size: 0.8125rem; color: var(--text-secondary);">No one yet</p>';

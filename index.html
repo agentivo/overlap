@@ -76,6 +76,8 @@
       align-items: center;
       gap: 0.5rem;
       margin-bottom: 0.5rem;
+      text-decoration: none;
+      color: inherit;
     }
 
     .logo svg {
@@ -854,13 +856,13 @@
   <div class="container">
     <header>
       <div>
-        <div class="logo">
+        <a href="/" class="logo">
           <svg viewBox="0 0 100 100" fill="none">
             <rect x="10" y="30" width="40" height="40" rx="8" fill="#4caf50" opacity="0.7"/>
             <rect x="50" y="30" width="40" height="40" rx="8" fill="#2196f3" opacity="0.7"/>
           </svg>
           <h1>Overlap</h1>
-        </div>
+        </a>
         <p class="subtitle">Share this link to find a time that works</p>
       </div>
       <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">

@@ -576,11 +576,40 @@
     }
 
     .best-times.visible {
-      display: block;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
+    .best-times-text {
+      flex: 1;
     }
 
     .best-times strong {
       color: #4caf50;
+    }
+
+    .best-times-copy {
+      background: transparent;
+      border: 1px solid rgba(76, 175, 80, 0.4);
+      color: #4caf50;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .best-times-copy:hover {
+      background: rgba(76, 175, 80, 0.2);
+    }
+
+    .best-times-copy.copied {
+      background: #4caf50;
+      color: white;
+      border-color: #4caf50;
     }
 
     .grid-cell:not(.header):not(.time-label):hover {
@@ -1521,8 +1550,12 @@
 
         // Show best times summary
         if (participantCount > 1 && perfectMatches.length > 0) {
-          const summary = formatBestTimes(perfectMatches);
-          bestTimesEl.innerHTML = `<strong>Everyone's free:</strong> ${summary}`;
+          const { summary, ranges } = formatBestTimes(perfectMatches);
+          bestTimesEl.innerHTML = `
+            <div class="best-times-text"><strong>Everyone's free:</strong> ${summary}</div>
+            <button class="best-times-copy" onclick="copyBestTimes()">Copy</button>
+          `;
+          bestTimesEl.dataset.ranges = JSON.stringify(ranges);
           bestTimesEl.classList.add('visible');
         } else {
           bestTimesEl.classList.remove('visible');
@@ -1553,14 +1586,43 @@
       });
       if (currentRange) ranges.push(currentRange);
 
-      // Format ranges (limit to 3)
-      return ranges.slice(0, 3).map(r => {
+      // Format ranges (limit to 3 for display)
+      const summary = ranges.slice(0, 3).map(r => {
         const date = new Date(r.dateStr);
         const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
         const startTime = formatTime(r.startMinutes);
         const endTime = formatTime(r.endMinutes + 15);
         return `${dayName} ${startTime}–${endTime}`;
       }).join(', ') + (ranges.length > 3 ? ` +${ranges.length - 3} more` : '');
+
+      return { summary, ranges };
+    }
+
+    function copyBestTimes() {
+      const bestTimesEl = document.getElementById('bestTimes');
+      const ranges = JSON.parse(bestTimesEl.dataset.ranges || '[]');
+      const title = document.getElementById('eventTitle').value.trim();
+
+      const lines = ranges.map(r => {
+        const date = new Date(r.dateStr);
+        const formatted = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        const startTime = formatTime(r.startMinutes);
+        const endTime = formatTime(r.endMinutes + 15);
+        return `${formatted}, ${startTime}–${endTime}`;
+      });
+
+      let text = title ? `${title}\n\n` : '';
+      text += `Times that work for everyone:\n${lines.join('\n')}`;
+
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = bestTimesEl.querySelector('.best-times-copy');
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
     }
 
     function formatTime(minutes) {

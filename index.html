@@ -853,6 +853,15 @@
       margin-bottom: 1rem;
     }
 
+    .loading-indicator {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      padding: 0.5rem 0.75rem;
+      background: var(--bg-secondary);
+      border-radius: 6px;
+      margin-bottom: 0.5rem;
+    }
+
     /* Recent events */
     .recent-events {
       margin-top: 1.5rem;
@@ -914,6 +923,7 @@
 
     <div class="panels">
       <div class="sidebar">
+        <div class="loading-indicator" id="loadingIndicator">Loading event data...</div>
         <div class="form-group">
           <label>Your Name</label>
           <input type="text" id="userName" placeholder="Enter to mark availability">
@@ -1085,6 +1095,14 @@
     let userManuallySwitchedMode = false;
     let initialModeSet = false;
     let gunDataLoaded = false;
+    let isExistingEvent = false; // true if we receive title/timezone (indicates data exists)
+
+    function setDataLoaded() {
+      if (!gunDataLoaded) {
+        gunDataLoaded = true;
+        document.getElementById('loadingIndicator').style.display = 'none';
+      }
+    }
 
     // Recent events storage
     const RECENT_EVENTS_KEY = 'overlap-recent-events';
@@ -1835,32 +1853,40 @@
     function subscribeToEvent() {
       const titleInput = document.getElementById('eventTitle');
 
-      // Wait for Gun to sync before allowing saves
-      // Use .once() to detect initial data, with timeout fallback for new events
-      const loadTimeout = setTimeout(() => {
+      // Timeout fallback - longer for existing events to allow server data restore
+      let loadTimeout = setTimeout(() => {
         if (!gunDataLoaded) {
-          gunDataLoaded = true;
+          // If we know it's an existing event but haven't received participant data,
+          // wait longer before allowing saves
+          if (isExistingEvent) {
+            loadTimeout = setTimeout(() => {
+              setDataLoaded();
+            }, 8000); // Additional 8 seconds for existing events
+          } else {
+            setDataLoaded();
+          }
         }
       }, 2000);
 
-      eventRef.once((data) => {
-        clearTimeout(loadTimeout);
-        gunDataLoaded = true;
-      });
-
       // Get event title
       eventRef.get('title').on((title) => {
-        if (title && document.activeElement !== titleInput) {
-          titleInput.value = title;
-          document.title = `${title} - Overlap`;
+        if (title) {
+          isExistingEvent = true;
+          if (document.activeElement !== titleInput) {
+            titleInput.value = title;
+            document.title = `${title} - Overlap`;
+          }
         }
       });
 
       // Get event timezone
       eventRef.get('timezone').on((tz) => {
-        if (tz && !eventTimezone) {
-          eventTimezone = tz;
-          updateTimezoneDisplay();
+        if (tz) {
+          isExistingEvent = true;
+          if (!eventTimezone) {
+            eventTimezone = tz;
+            updateTimezoneDisplay();
+          }
         }
       });
 
@@ -1884,8 +1910,10 @@
         allParticipants[name] = new Set(slots);
 
         // Mark data as loaded when we receive participant data
+        // This is the reliable signal that Gun has synced
         if (!gunDataLoaded) {
-          gunDataLoaded = true;
+          clearTimeout(loadTimeout);
+          setDataLoaded();
         }
 
         // On first participant data, switch to Group view if there are participants

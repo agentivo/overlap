@@ -1559,12 +1559,25 @@
         bestTimesEl.classList.remove('visible');
       } else {
         // View mode - show aggregate
-        const participantCount = Object.keys(allParticipants).length;
-        const perfectMatches = [];
+        const participantNames = Object.keys(allParticipants);
+        const participantCount = participantNames.length;
+        const slotData = {}; // cellId -> { count, available: [], missing: [] }
 
         cells.forEach(cell => {
           const cellId = cell.dataset.cellId;
-          const count = Object.values(allParticipants).filter(slots => slots.has(cellId)).length;
+          const available = [];
+          const missing = [];
+
+          participantNames.forEach(name => {
+            if (allParticipants[name].has(cellId)) {
+              available.push(name);
+            } else {
+              missing.push(name);
+            }
+          });
+
+          const count = available.length;
+          slotData[cellId] = { count, available, missing };
 
           cell.className = 'grid-cell';
           cell.innerHTML = '';
@@ -1582,18 +1595,14 @@
             // Highlight perfect match
             if (count === participantCount) {
               cell.classList.add('perfect-match');
-              perfectMatches.push(cellId);
             }
           }
 
           // Add hover for tooltip
           cell.onmouseenter = (e) => {
             if (mode !== 'view') return;
-            const names = Object.entries(allParticipants)
-              .filter(([, slots]) => slots.has(cellId))
-              .map(([name]) => name);
-            if (names.length > 0) {
-              tooltip.textContent = names.join(', ');
+            if (available.length > 0) {
+              tooltip.textContent = available.join(', ');
               tooltip.classList.add('visible');
               const rect = cell.getBoundingClientRect();
               const containerRect = cell.closest('.grid-container').getBoundingClientRect();
@@ -1606,18 +1615,104 @@
           };
         });
 
+        // Categorize slots
+        const perfectMatches = [];
+        const nearMatches = []; // missing exactly 1 person
+        const goodMatches = []; // 50%+ available
+
+        Object.entries(slotData).forEach(([cellId, data]) => {
+          if (data.count === participantCount && participantCount > 0) {
+            perfectMatches.push(cellId);
+          } else if (data.count === participantCount - 1 && participantCount > 1) {
+            nearMatches.push({ cellId, missing: data.missing[0] });
+          } else if (data.count >= participantCount / 2 && data.count > 0) {
+            goodMatches.push({ cellId, count: data.count, missing: data.missing });
+          }
+        });
+
         // Show best times summary
-        if (participantCount > 1 && perfectMatches.length > 0) {
-          const { summary, ranges } = formatBestTimes(perfectMatches);
-          bestTimesEl.innerHTML = `
-            <div class="best-times-text"><strong>Everyone's free:</strong> ${summary}</div>
-            <button class="best-times-copy" onclick="copyBestTimes()">Copy</button>
-          `;
-          bestTimesEl.dataset.ranges = JSON.stringify(ranges);
-          bestTimesEl.classList.add('visible');
-        } else {
-          bestTimesEl.classList.remove('visible');
-        }
+        showBestTimesSummary(participantCount, perfectMatches, nearMatches, goodMatches, slotData);
+      }
+    }
+
+    function showBestTimesSummary(participantCount, perfectMatches, nearMatches, goodMatches, slotData) {
+      const bestTimesEl = document.getElementById('bestTimes');
+
+      // Single participant - prompt to share
+      if (participantCount === 1) {
+        bestTimesEl.innerHTML = `
+          <div class="best-times-text">Share the link to find times that work for everyone.</div>
+        `;
+        bestTimesEl.classList.add('visible');
+        return;
+      }
+
+      // Perfect matches exist
+      if (perfectMatches.length > 0) {
+        const { summary, ranges } = formatBestTimes(perfectMatches);
+        bestTimesEl.innerHTML = `
+          <div class="best-times-text"><strong>Everyone's free:</strong> ${summary}</div>
+          <button class="best-times-copy" onclick="copyBestTimes()">Copy</button>
+        `;
+        bestTimesEl.dataset.ranges = JSON.stringify(ranges);
+        bestTimesEl.dataset.type = 'perfect';
+        bestTimesEl.classList.add('visible');
+        return;
+      }
+
+      // Near matches (missing 1 person)
+      if (nearMatches.length > 0) {
+        // Group by who's missing
+        const byMissing = {};
+        nearMatches.forEach(({ cellId, missing }) => {
+          if (!byMissing[missing]) byMissing[missing] = [];
+          byMissing[missing].push(cellId);
+        });
+
+        // Find the person whose absence has the most slots
+        const sorted = Object.entries(byMissing).sort((a, b) => b[1].length - a[1].length);
+        const [missingPerson, slots] = sorted[0];
+        const { summary, ranges } = formatBestTimes(slots);
+
+        bestTimesEl.innerHTML = `
+          <div class="best-times-text"><strong>Almost everyone:</strong> ${summary} <span style="opacity: 0.7">(except ${missingPerson})</span></div>
+          <button class="best-times-copy" onclick="copyBestTimes()">Copy</button>
+        `;
+        bestTimesEl.dataset.ranges = JSON.stringify(ranges);
+        bestTimesEl.dataset.type = 'near';
+        bestTimesEl.dataset.missing = missingPerson;
+        bestTimesEl.classList.add('visible');
+        return;
+      }
+
+      // Good matches (50%+ but not near-perfect)
+      if (goodMatches.length > 0 && participantCount > 2) {
+        // Sort by count descending, take top slots
+        goodMatches.sort((a, b) => b.count - a.count);
+        const bestCount = goodMatches[0].count;
+        const topSlots = goodMatches.filter(m => m.count === bestCount).map(m => m.cellId);
+        const { summary, ranges } = formatBestTimes(topSlots);
+
+        bestTimesEl.innerHTML = `
+          <div class="best-times-text"><strong>Best options (${bestCount}/${participantCount}):</strong> ${summary}</div>
+          <button class="best-times-copy" onclick="copyBestTimes()">Copy</button>
+        `;
+        bestTimesEl.dataset.ranges = JSON.stringify(ranges);
+        bestTimesEl.dataset.type = 'partial';
+        bestTimesEl.dataset.count = bestCount;
+        bestTimesEl.dataset.total = participantCount;
+        bestTimesEl.classList.add('visible');
+        return;
+      }
+
+      // No good options
+      if (participantCount > 1) {
+        bestTimesEl.innerHTML = `
+          <div class="best-times-text">No overlapping availability yet. Ask participants to add more times.</div>
+        `;
+        bestTimesEl.classList.add('visible');
+      } else {
+        bestTimesEl.classList.remove('visible');
       }
     }
 
@@ -1660,6 +1755,7 @@
       const bestTimesEl = document.getElementById('bestTimes');
       const ranges = JSON.parse(bestTimesEl.dataset.ranges || '[]');
       const title = document.getElementById('eventTitle').value.trim();
+      const type = bestTimesEl.dataset.type;
 
       const lines = ranges.map(r => {
         const date = new Date(r.dateStr);
@@ -1670,7 +1766,17 @@
       });
 
       let text = title ? `${title}\n\n` : '';
-      text += `Times that work for everyone:\n${lines.join('\n')}`;
+
+      if (type === 'perfect') {
+        text += `Times that work for everyone:\n${lines.join('\n')}`;
+      } else if (type === 'near') {
+        const missing = bestTimesEl.dataset.missing;
+        text += `Times that work for almost everyone (except ${missing}):\n${lines.join('\n')}`;
+      } else if (type === 'partial') {
+        const count = bestTimesEl.dataset.count;
+        const total = bestTimesEl.dataset.total;
+        text += `Best available times (${count}/${total} free):\n${lines.join('\n')}`;
+      }
 
       navigator.clipboard.writeText(text).then(() => {
         const btn = bestTimesEl.querySelector('.best-times-copy');
@@ -1893,7 +1999,8 @@
 
     // Auto-focus name input when typing (but not if in another input)
     document.addEventListener('keydown', (e) => {
-      if (document.activeElement.tagName === 'INPUT') return;
+      const tag = document.activeElement.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key.length !== 1) return;
       document.getElementById('userName').focus();

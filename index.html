@@ -999,6 +999,8 @@
     let confirmedAsMe = new Set(); // Names user confirmed as theirs
     let pendingNameCheck = null; // Name waiting for confirmation
     let saveTimeout = null;
+    let userManuallySwitchedMode = false;
+    let initialModeSet = false;
 
     // Recent events storage
     const RECENT_EVENTS_KEY = 'overlap-recent-events';
@@ -1570,8 +1572,9 @@
       return hour + ':' + m.toString().padStart(2, '0') + period;
     }
 
-    function setMode(newMode) {
+    function setMode(newMode, manual = true) {
       mode = newMode;
+      if (manual) userManuallySwitchedMode = true;
       const buttons = document.querySelectorAll('.mode-toggle button');
       buttons[0].classList.toggle('active', mode === 'edit');
       buttons[1].classList.toggle('active', mode === 'view');
@@ -1640,6 +1643,12 @@
         // Parse slots
         const slots = data.slots ? data.slots.split(',').filter(Boolean) : [];
         allParticipants[name] = new Set(slots);
+
+        // On first participant data, switch to Group view if there are participants
+        if (!initialModeSet && Object.keys(allParticipants).length > 0) {
+          initialModeSet = true;
+          setMode('view', false);
+        }
 
         updateParticipantList();
         updateGridDisplay();
@@ -1740,6 +1749,10 @@
 
     // Update participant name in real-time
     nameInput.addEventListener('input', () => {
+      // Auto-switch to edit mode when user starts typing name
+      if (!userManuallySwitchedMode && mode !== 'edit') {
+        setMode('edit', false);
+      }
       autoSave();
       updateEditButtonLabel();
     });

@@ -1095,7 +1095,6 @@
     let userManuallySwitchedMode = false;
     let initialModeSet = false;
     let gunDataLoaded = false;
-    let isExistingEvent = false; // true if we receive title/timezone (indicates data exists)
 
     function setDataLoaded() {
       if (!gunDataLoaded) {
@@ -1853,40 +1852,24 @@
     function subscribeToEvent() {
       const titleInput = document.getElementById('eventTitle');
 
-      // Timeout fallback - longer for existing events to allow server data restore
-      let loadTimeout = setTimeout(() => {
-        if (!gunDataLoaded) {
-          // If we know it's an existing event but haven't received participant data,
-          // wait longer before allowing saves
-          if (isExistingEvent) {
-            loadTimeout = setTimeout(() => {
-              setDataLoaded();
-            }, 8000); // Additional 8 seconds for existing events
-          } else {
-            setDataLoaded();
-          }
-        }
-      }, 2000);
+      // Timeout fallback for new events with no data
+      const loadTimeout = setTimeout(() => {
+        setDataLoaded();
+      }, 3000);
 
       // Get event title
       eventRef.get('title').on((title) => {
-        if (title) {
-          isExistingEvent = true;
-          if (document.activeElement !== titleInput) {
-            titleInput.value = title;
-            document.title = `${title} - Overlap`;
-          }
+        if (title && document.activeElement !== titleInput) {
+          titleInput.value = title;
+          document.title = `${title} - Overlap`;
         }
       });
 
       // Get event timezone
       eventRef.get('timezone').on((tz) => {
-        if (tz) {
-          isExistingEvent = true;
-          if (!eventTimezone) {
-            eventTimezone = tz;
-            updateTimezoneDisplay();
-          }
+        if (tz && !eventTimezone) {
+          eventTimezone = tz;
+          updateTimezoneDisplay();
         }
       });
 

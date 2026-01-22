@@ -25,10 +25,36 @@ const server = http.createServer((req, res) => {
   }
 });
 
-// Attach Gun relay to the server
-Gun({ web: server, radisk: true });
+// Create Gun instance with persistence
+const gun = Gun({ web: server, radisk: true });
 
-server.listen(port, () => {
-  console.log(`Overlap running on port ${port}`);
-  console.log(`Gun relay active at /gun`);
+// Wait for Gun to load data from disk before accepting connections
+// This prevents race conditions where clients write before data is restored
+console.log('Waiting for Gun to load data from disk...');
+
+const startTime = Date.now();
+const maxWait = 10000; // 10 seconds max
+
+function startServer() {
+  server.listen(port, () => {
+    const loadTime = Date.now() - startTime;
+    console.log(`Gun data loaded in ${loadTime}ms`);
+    console.log(`Overlap running on port ${port}`);
+    console.log(`Gun relay active at /gun`);
+  });
+}
+
+// Trigger a read to force radisk to load, then start server
+gun.get('overlap-events').once((data) => {
+  if (!server.listening) {
+    startServer();
+  }
 });
+
+// Fallback timeout in case there's no data yet (new deployment)
+setTimeout(() => {
+  if (!server.listening) {
+    console.log('No existing data found, starting server...');
+    startServer();
+  }
+}, maxWait);

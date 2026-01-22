@@ -1032,6 +1032,7 @@
     let saveTimeout = null;
     let userManuallySwitchedMode = false;
     let initialModeSet = false;
+    let gunDataLoaded = false;
 
     // Recent events storage
     const RECENT_EVENTS_KEY = 'overlap-recent-events';
@@ -1383,6 +1384,9 @@
       const name = document.getElementById('userName').value.trim();
       if (!name) return;
 
+      // Don't save until Gun has synced initial data
+      if (!gunDataLoaded) return;
+
       // Check for name collision - someone else might have this name
       if (allParticipants[name] && allParticipants[name].size > 0 &&
           name !== myCurrentName && !confirmedAsMe.has(name)) {
@@ -1673,6 +1677,19 @@
     function subscribeToEvent() {
       const titleInput = document.getElementById('eventTitle');
 
+      // Wait for Gun to sync before allowing saves
+      // Use .once() to detect initial data, with timeout fallback for new events
+      const loadTimeout = setTimeout(() => {
+        if (!gunDataLoaded) {
+          gunDataLoaded = true;
+        }
+      }, 2000);
+
+      eventRef.once((data) => {
+        clearTimeout(loadTimeout);
+        gunDataLoaded = true;
+      });
+
       // Get event title
       eventRef.get('title').on((title) => {
         if (title && document.activeElement !== titleInput) {
@@ -1707,6 +1724,11 @@
         // Parse slots
         const slots = data.slots ? data.slots.split(',').filter(Boolean) : [];
         allParticipants[name] = new Set(slots);
+
+        // Mark data as loaded when we receive participant data
+        if (!gunDataLoaded) {
+          gunDataLoaded = true;
+        }
 
         // On first participant data, switch to Group view if there are participants
         if (!initialModeSet && Object.keys(allParticipants).length > 0) {
